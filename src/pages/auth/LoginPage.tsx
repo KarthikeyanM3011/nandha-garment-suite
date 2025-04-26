@@ -85,20 +85,21 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-white to-gray-50 px-4">
+      <Card className="w-full max-w-md shadow-card border-0">
+        <CardHeader className="space-y-1 pb-4">
           <div className="flex items-center mb-4">
-            <Link to="/" className="text-gray-500 hover:text-brand-blue mr-4">
+            <Link to="/" className="text-gray-500 hover:text-brand-blue mr-4 transition-colors">
               <ArrowLeft size={18} />
             </Link>
             <div className="flex-1 text-center">
-              <span className="text-xl font-bold text-brand-blue">Nandha</span>
-              <span className="text-xl font-semibold text-brand-black">Garments</span>
+              <span className="text-xl font-bold bg-gradient-to-r from-brand-blue to-brand-dark bg-clip-text text-transparent">
+                Nandha<span className="font-semibold">Garments</span>
+              </span>
             </div>
           </div>
-          <CardTitle className="text-2xl font-semibold text-center">{pageTitle}</CardTitle>
-          <CardDescription className="text-center">
+          <CardTitle className="text-2xl font-semibold text-center text-gray-800">{pageTitle}</CardTitle>
+          <CardDescription className="text-center text-gray-500">
             Enter your credentials to access your account
           </CardDescription>
         </CardHeader>
@@ -110,7 +111,7 @@ const LoginPage: React.FC = () => {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email</FormLabel>
+                    <FormLabel className="text-gray-700">Email</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="your.email@example.com"
@@ -118,10 +119,10 @@ const LoginPage: React.FC = () => {
                         autoComplete="email"
                         {...field}
                         disabled={isLoading}
-                        className="input-field"
+                        className="h-11 bg-white border-gray-200 focus:border-brand-blue focus:ring focus:ring-brand-blue/20"
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-red-500" />
                   </FormItem>
                 )}
               />
@@ -130,7 +131,7 @@ const LoginPage: React.FC = () => {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Password</FormLabel>
+                    <FormLabel className="text-gray-700">Password</FormLabel>
                     <FormControl>
                       <div className="relative">
                         <Input
@@ -139,12 +140,13 @@ const LoginPage: React.FC = () => {
                           autoComplete="current-password"
                           {...field}
                           disabled={isLoading}
-                          className="input-field pr-10"
+                          className="h-11 bg-white border-gray-200 focus:border-brand-blue focus:ring focus:ring-brand-blue/20 pr-10"
                         />
                         <button
                           type="button"
                           onClick={togglePasswordVisibility}
-                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500"
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                          tabIndex={-1}
                         >
                           {showPassword ? (
                             <EyeOff size={18} />
@@ -154,13 +156,13 @@ const LoginPage: React.FC = () => {
                         </button>
                       </div>
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-red-500" />
                   </FormItem>
                 )}
               />
               <Button
                 type="submit"
-                className="w-full bg-brand-blue hover:bg-brand-dark"
+                className="w-full h-11 bg-brand-blue hover:bg-brand-dark shadow-button transition-all duration-200"
                 disabled={isLoading}
               >
                 {isLoading ? (
@@ -178,19 +180,13 @@ const LoginPage: React.FC = () => {
             </form>
           </Form>
         </CardContent>
-        <CardFooter className="flex flex-col space-y-4">
+        <CardFooter className="flex flex-col space-y-4 pt-0">
           {userType === 'individual' && (
-            <div className="text-center text-sm">
+            <div className="text-center text-sm w-full">
               <span className="text-gray-500">Don't have an account?</span>{' '}
-              <Link to="/signup" className="text-brand-blue hover:underline font-medium">
+              <Link to="/signup" className="text-brand-blue hover:underline font-medium transition-colors">
                 Sign up
               </Link>
-            </div>
-          )}
-          {role === 'SUPER_ADMIN' && (
-            <div className="text-center text-xs text-gray-500 mt-4">
-              <p>Initial super admin credentials:</p>
-              <p>Email: mk@admin.com, Password: mk@admin</p>
             </div>
           )}
         </CardFooter>

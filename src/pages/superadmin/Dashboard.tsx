@@ -1,237 +1,396 @@
 
 import React, { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter,
 } from '@/components/ui/card';
-import { Building2, Users, ShoppingBag, ClipboardList } from 'lucide-react';
-import { userService, productService, orderService } from '../../services/api';
-
-interface StatsData {
-  totalOrganizations: number;
-  totalIndividuals: number;
-  totalProducts: number;
-  totalOrders: number;
-}
+import { Button } from '@/components/ui/button';
+import { Building2, Users, ShoppingBag, ClipboardList, ArrowRight, AlertCircle, Calendar } from 'lucide-react';
+import { userService, productService } from '../../services/api';
+import { format } from 'date-fns';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
 
 const SuperAdminDashboard: React.FC = () => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [stats, setStats] = useState<StatsData>({
-    totalOrganizations: 0,
-    totalIndividuals: 0,
-    totalProducts: 0,
-    totalOrders: 0,
+  // Fetch organizations data
+  const {
+    data: organizationsData,
+    isLoading: isLoadingOrgs,
+    error: orgsError
+  } = useQuery({
+    queryKey: ['organizations'],
+    queryFn: async () => {
+      try {
+        // In a real implementation, we would have an API endpoint to get all organizations
+        // For now, we'll simulate getting org admins, which gives us org data
+        const response = await userService.getAllOrgAdmins();
+        
+        // Extract unique organizations
+        const orgs = response.data.admins.reduce((acc: any[], admin: any) => {
+          if (!acc.some(org => org.id === admin.org_id)) {
+            acc.push({
+              id: admin.org_id,
+              name: admin.org_name,
+              adminCount: 1
+            });
+          } else {
+            const org = acc.find(org => org.id === admin.org_id);
+            if (org) org.adminCount++;
+          }
+          return acc;
+        }, []);
+        
+        return orgs;
+      } catch (error) {
+        console.error('Failed to fetch organizations:', error);
+        toast.error('Failed to fetch organizations data');
+        throw error;
+      }
+    }
   });
 
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      setIsLoading(true);
+  // Fetch individual users data
+  const {
+    data: individualsData,
+    isLoading: isLoadingIndividuals,
+    error: individualsError
+  } = useQuery({
+    queryKey: ['individuals'],
+    queryFn: async () => {
       try {
-        // These would be actual API calls in a real scenario
-        // For now, we'll simulate some data
-        // const orgAdmins = await userService.getAllOrgAdmins();
-        // const individuals = await userService.getAllIndividuals();
-        // const products = await productService.getAllProducts();
-        // const orders = await orderService.getAllOrders();
-        
-        // Simulate data
-        setStats({
-          totalOrganizations: 12,
-          totalIndividuals: 48,
-          totalProducts: 35,
-          totalOrders: 124,
-        });
+        // In a real implementation, you would have an endpoint to get individual users
+        // For now, we'll return a simple mock
+        return { count: 48 };
       } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-      } finally {
-        setIsLoading(false);
+        console.error('Failed to fetch individuals:', error);
+        toast.error('Failed to fetch individuals data');
+        throw error;
       }
-    };
+    }
+  });
 
-    fetchDashboardData();
-  }, []);
+  // Fetch products data
+  const {
+    data: productsData,
+    isLoading: isLoadingProducts,
+    error: productsError
+  } = useQuery({
+    queryKey: ['products'],
+    queryFn: async () => {
+      try {
+        const response = await productService.getAllProducts();
+        return response.data.products || [];
+      } catch (error) {
+        console.error('Failed to fetch products:', error);
+        toast.error('Failed to fetch products data');
+        throw error;
+      }
+    }
+  });
+
+  // Fetch orders data
+  const {
+    data: ordersData,
+    isLoading: isLoadingOrders,
+    error: ordersError
+  } = useQuery({
+    queryKey: ['orders'],
+    queryFn: async () => {
+      try {
+        // In a real implementation, you would have an endpoint to get all orders
+        // For now, we'll return a simple mock
+        return { count: 124 };
+      } catch (error) {
+        console.error('Failed to fetch orders:', error);
+        toast.error('Failed to fetch orders data');
+        throw error;
+      }
+    }
+  });
+
+  const isLoading = isLoadingOrgs || isLoadingIndividuals || isLoadingProducts || isLoadingOrders;
+  const hasError = orgsError || individualsError || productsError || ordersError;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-fade-in">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Super Admin Dashboard</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-1">Super Admin Dashboard</h1>
+          <p className="text-gray-500">Welcome to the command center. Manage everything from here.</p>
+        </div>
+        
+        <div className="hidden md:flex items-center space-x-2 text-sm text-gray-500">
+          <Calendar className="h-4 w-4 text-brand-blue" />
+          <span>{format(new Date(), 'EEEE, MMMM d, yyyy')}</span>
+        </div>
       </div>
+
+      {hasError && (
+        <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded-md flex items-start space-x-3">
+          <AlertCircle className="h-5 w-5 text-red-400 mt-0.5" />
+          <div>
+            <h3 className="font-medium text-red-800">There was an error loading dashboard data</h3>
+            <p className="text-sm text-red-600">Please try refreshing the page or contact support if the problem persists.</p>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Organizations Card */}
-        <Card className="card-hover">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-medium">Organizations</CardTitle>
+        <Card className="border-0 shadow-card hover:shadow-card-hover transition-shadow duration-300 overflow-hidden group">
+          <CardHeader className="pb-2 border-b border-gray-100">
+            <CardTitle className="text-lg font-medium flex items-center space-x-2">
+              <Building2 className="h-5 w-5 text-brand-blue" />
+              <span>Organizations</span>
+            </CardTitle>
             <CardDescription>Total registered organizations</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-4">
             <div className="flex items-center justify-between">
-              <div className="text-3xl font-bold">
-                {isLoading ? (
-                  <div className="h-8 w-16 bg-gray-200 animate-pulse rounded"></div>
+              <div className="text-3xl font-bold text-gray-800">
+                {isLoadingOrgs ? (
+                  <Skeleton className="h-9 w-16 bg-gray-200" />
                 ) : (
-                  stats.totalOrganizations
+                  organizationsData?.length || 0
                 )}
               </div>
-              <div className="p-2 bg-blue-100 rounded-full">
-                <Building2 className="h-5 w-5 text-brand-blue" />
+              <div className="p-2 bg-blue-50 rounded-full text-brand-blue">
+                <Building2 className="h-6 w-6" />
               </div>
             </div>
           </CardContent>
+          <CardFooter className="pt-0 pb-4">
+            <Link to="/super-admin/organizations" className="w-full">
+              <Button variant="ghost" className="w-full justify-between text-brand-blue hover:text-brand-dark hover:bg-blue-50 group-hover:bg-blue-50/50 transition-colors">
+                <span>View Organizations</span>
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </Button>
+            </Link>
+          </CardFooter>
         </Card>
 
         {/* Individuals Card */}
-        <Card className="card-hover">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-medium">Individuals</CardTitle>
+        <Card className="border-0 shadow-card hover:shadow-card-hover transition-shadow duration-300 overflow-hidden group">
+          <CardHeader className="pb-2 border-b border-gray-100">
+            <CardTitle className="text-lg font-medium flex items-center space-x-2">
+              <Users className="h-5 w-5 text-green-600" />
+              <span>Individuals</span>
+            </CardTitle>
             <CardDescription>Total individual users</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-4">
             <div className="flex items-center justify-between">
-              <div className="text-3xl font-bold">
-                {isLoading ? (
-                  <div className="h-8 w-16 bg-gray-200 animate-pulse rounded"></div>
+              <div className="text-3xl font-bold text-gray-800">
+                {isLoadingIndividuals ? (
+                  <Skeleton className="h-9 w-16 bg-gray-200" />
                 ) : (
-                  stats.totalIndividuals
+                  individualsData?.count || 0
                 )}
               </div>
-              <div className="p-2 bg-green-100 rounded-full">
-                <Users className="h-5 w-5 text-green-600" />
+              <div className="p-2 bg-green-50 rounded-full text-green-600">
+                <Users className="h-6 w-6" />
               </div>
             </div>
           </CardContent>
+          <CardFooter className="pt-0 pb-4">
+            <Link to="/super-admin/individuals" className="w-full">
+              <Button variant="ghost" className="w-full justify-between text-green-600 hover:text-green-700 hover:bg-green-50 group-hover:bg-green-50/50 transition-colors">
+                <span>View Individuals</span>
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </Button>
+            </Link>
+          </CardFooter>
         </Card>
 
         {/* Products Card */}
-        <Card className="card-hover">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-medium">Products</CardTitle>
+        <Card className="border-0 shadow-card hover:shadow-card-hover transition-shadow duration-300 overflow-hidden group">
+          <CardHeader className="pb-2 border-b border-gray-100">
+            <CardTitle className="text-lg font-medium flex items-center space-x-2">
+              <ShoppingBag className="h-5 w-5 text-purple-600" />
+              <span>Products</span>
+            </CardTitle>
             <CardDescription>Total available products</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-4">
             <div className="flex items-center justify-between">
-              <div className="text-3xl font-bold">
-                {isLoading ? (
-                  <div className="h-8 w-16 bg-gray-200 animate-pulse rounded"></div>
+              <div className="text-3xl font-bold text-gray-800">
+                {isLoadingProducts ? (
+                  <Skeleton className="h-9 w-16 bg-gray-200" />
                 ) : (
-                  stats.totalProducts
+                  productsData?.length || 0
                 )}
               </div>
-              <div className="p-2 bg-purple-100 rounded-full">
-                <ShoppingBag className="h-5 w-5 text-purple-600" />
+              <div className="p-2 bg-purple-50 rounded-full text-purple-600">
+                <ShoppingBag className="h-6 w-6" />
               </div>
             </div>
           </CardContent>
+          <CardFooter className="pt-0 pb-4">
+            <Link to="/super-admin/products" className="w-full">
+              <Button variant="ghost" className="w-full justify-between text-purple-600 hover:text-purple-700 hover:bg-purple-50 group-hover:bg-purple-50/50 transition-colors">
+                <span>View Products</span>
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </Button>
+            </Link>
+          </CardFooter>
         </Card>
 
         {/* Orders Card */}
-        <Card className="card-hover">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-medium">Orders</CardTitle>
+        <Card className="border-0 shadow-card hover:shadow-card-hover transition-shadow duration-300 overflow-hidden group">
+          <CardHeader className="pb-2 border-b border-gray-100">
+            <CardTitle className="text-lg font-medium flex items-center space-x-2">
+              <ClipboardList className="h-5 w-5 text-amber-600" />
+              <span>Orders</span>
+            </CardTitle>
             <CardDescription>Total orders processed</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-4">
             <div className="flex items-center justify-between">
-              <div className="text-3xl font-bold">
-                {isLoading ? (
-                  <div className="h-8 w-16 bg-gray-200 animate-pulse rounded"></div>
+              <div className="text-3xl font-bold text-gray-800">
+                {isLoadingOrders ? (
+                  <Skeleton className="h-9 w-16 bg-gray-200" />
                 ) : (
-                  stats.totalOrders
+                  ordersData?.count || 0
                 )}
               </div>
-              <div className="p-2 bg-amber-100 rounded-full">
-                <ClipboardList className="h-5 w-5 text-amber-600" />
+              <div className="p-2 bg-amber-50 rounded-full text-amber-600">
+                <ClipboardList className="h-6 w-6" />
               </div>
             </div>
           </CardContent>
+          <CardFooter className="pt-0 pb-4">
+            <Link to="/super-admin/orders" className="w-full">
+              <Button variant="ghost" className="w-full justify-between text-amber-600 hover:text-amber-700 hover:bg-amber-50 group-hover:bg-amber-50/50 transition-colors">
+                <span>View Orders</span>
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </Button>
+            </Link>
+          </CardFooter>
         </Card>
       </div>
 
       {/* Recent Activity Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <Card className="border-0 shadow-card">
           <CardHeader>
-            <CardTitle>Recent Organizations</CardTitle>
+            <CardTitle className="flex items-center space-x-2">
+              <Building2 className="h-5 w-5 text-brand-blue" />
+              <span>Recent Organizations</span>
+            </CardTitle>
             <CardDescription>
               Latest organizations registered on the platform
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
+            {isLoadingOrgs ? (
               <div className="space-y-4">
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-12 bg-gray-200 animate-pulse rounded"></div>
+                  <div key={i} className="flex justify-between items-center">
+                    <Skeleton className="h-12 w-full bg-gray-100" />
+                  </div>
                 ))}
               </div>
-            ) : (
+            ) : organizationsData && organizationsData.length > 0 ? (
               <div className="space-y-4">
-                {/* This would be a real data list in a real app */}
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
-                  <div>
-                    <p className="font-medium">ABC Corporation</p>
-                    <p className="text-sm text-gray-500">Registered 3 days ago</p>
+                {organizationsData.slice(0, 3).map((org: any) => (
+                  <div key={org.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-brand-blue/20 hover:bg-blue-50/30 transition-colors group">
+                    <div>
+                      <p className="font-medium text-gray-800 group-hover:text-brand-blue transition-colors">{org.name}</p>
+                      <p className="text-sm text-gray-500">{org.adminCount} {org.adminCount === 1 ? 'admin' : 'admins'}</p>
+                    </div>
+                    <Link to={`/super-admin/organizations/${org.id}`}>
+                      <Button size="sm" variant="ghost" className="text-gray-500 hover:text-brand-blue">
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    </Link>
                   </div>
-                  <div className="text-sm text-gray-500">5 users</div>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
-                  <div>
-                    <p className="font-medium">XYZ Industries</p>
-                    <p className="text-sm text-gray-500">Registered 5 days ago</p>
+                ))}
+                {organizationsData.length > 3 && (
+                  <div className="text-center pt-2">
+                    <Link to="/super-admin/organizations">
+                      <Button variant="link" className="text-brand-blue hover:text-brand-dark">
+                        View all organizations
+                      </Button>
+                    </Link>
                   </div>
-                  <div className="text-sm text-gray-500">8 users</div>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
-                  <div>
-                    <p className="font-medium">Tech Solutions Ltd</p>
-                    <p className="text-sm text-gray-500">Registered 1 week ago</p>
-                  </div>
-                  <div className="text-sm text-gray-500">12 users</div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Building2 className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                <p>No organizations found</p>
+                <div className="mt-4">
+                  <Link to="/super-admin/organizations/new">
+                    <Button variant="outline" className="text-brand-blue border-brand-blue hover:bg-brand-blue/5">
+                      Create Organization
+                    </Button>
+                  </Link>
                 </div>
               </div>
             )}
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-0 shadow-card">
           <CardHeader>
-            <CardTitle>Recent Orders</CardTitle>
+            <CardTitle className="flex items-center space-x-2">
+              <ShoppingBag className="h-5 w-5 text-purple-600" />
+              <span>Recent Products</span>
+            </CardTitle>
             <CardDescription>
-              Latest orders placed on the platform
+              Latest products added to the platform
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
+            {isLoadingProducts ? (
               <div className="space-y-4">
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-12 bg-gray-200 animate-pulse rounded"></div>
+                  <div key={i} className="flex justify-between items-center">
+                    <Skeleton className="h-12 w-full bg-gray-100" />
+                  </div>
                 ))}
               </div>
-            ) : (
+            ) : productsData && productsData.length > 0 ? (
               <div className="space-y-4">
-                {/* This would be a real data list in a real app */}
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
-                  <div>
-                    <p className="font-medium">Order #12345</p>
-                    <p className="text-sm text-gray-500">ABC Corporation</p>
+                {productsData.slice(0, 3).map((product: any) => (
+                  <div key={product.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-purple-300/20 hover:bg-purple-50/30 transition-colors group">
+                    <div>
+                      <p className="font-medium text-gray-800 group-hover:text-purple-600 transition-colors">{product.name}</p>
+                      <p className="text-sm text-gray-500">{product.category_name} - ₹{product.price}</p>
+                    </div>
+                    <Link to={`/super-admin/products/${product.id}`}>
+                      <Button size="sm" variant="ghost" className="text-gray-500 hover:text-purple-600">
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    </Link>
                   </div>
-                  <div className="text-sm font-medium text-green-600">Completed</div>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
-                  <div>
-                    <p className="font-medium">Order #12344</p>
-                    <p className="text-sm text-gray-500">John Doe (Individual)</p>
+                ))}
+                {productsData.length > 3 && (
+                  <div className="text-center pt-2">
+                    <Link to="/super-admin/products">
+                      <Button variant="link" className="text-purple-600 hover:text-purple-700">
+                        View all products
+                      </Button>
+                    </Link>
                   </div>
-                  <div className="text-sm font-medium text-blue-600">Processing</div>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
-                  <div>
-                    <p className="font-medium">Order #12343</p>
-                    <p className="text-sm text-gray-500">XYZ Industries</p>
-                  </div>
-                  <div className="text-sm font-medium text-amber-600">Pending</div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <ShoppingBag className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                <p>No products found</p>
+                <div className="mt-4">
+                  <Link to="/super-admin/products/new">
+                    <Button variant="outline" className="text-purple-600 border-purple-600 hover:bg-purple-50">
+                      Add Product
+                    </Button>
+                  </Link>
                 </div>
               </div>
             )}

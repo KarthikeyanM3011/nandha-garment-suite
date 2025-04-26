@@ -1,8 +1,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/sonner";
 
 // Authentication Context
 import { AuthProvider } from "./contexts/AuthContext";
@@ -31,7 +30,14 @@ import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 
 // Create React Query client
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 const App = () => {
   return (
@@ -64,8 +70,13 @@ const App = () => {
             }>
               <Route path="dashboard" element={<SuperAdminDashboard />} />
               <Route path="organizations" element={<div>Organizations Management</div>} />
+              <Route path="organizations/:orgId" element={<div>Organization Details</div>} />
+              <Route path="organizations/new" element={<div>Create Organization</div>} />
               <Route path="products" element={<div>Products Management</div>} />
+              <Route path="products/:productId" element={<div>Product Details</div>} />
+              <Route path="products/new" element={<div>Create Product</div>} />
               <Route path="orders" element={<div>Orders Management</div>} />
+              <Route path="orders/:orderId" element={<div>Order Details</div>} />
               <Route path="profile" element={<div>Profile Settings</div>} />
               <Route index element={<Navigate to="dashboard" replace />} />
             </Route>
@@ -78,9 +89,16 @@ const App = () => {
             }>
               <Route path="dashboard" element={<OrgAdminDashboard />} />
               <Route path="users" element={<div>User Management</div>} />
+              <Route path="users/new" element={<div>Create User</div>} />
+              <Route path="users/:userId" element={<div>User Details</div>} />
               <Route path="measurements" element={<div>Measurement Management</div>} />
+              <Route path="measurements/new" element={<div>New Measurement</div>} />
+              <Route path="measurements/:measurementId" element={<div>Measurement Details</div>} />
               <Route path="products" element={<div>Product Catalog</div>} />
+              <Route path="products/:productId" element={<div>Product Details</div>} />
               <Route path="orders" element={<div>Orders Management</div>} />
+              <Route path="orders/new" element={<div>Place Order</div>} />
+              <Route path="orders/:orderId" element={<div>Order Details</div>} />
               <Route path="profile" element={<div>Profile Settings</div>} />
               <Route index element={<Navigate to="dashboard" replace />} />
             </Route>
@@ -93,9 +111,13 @@ const App = () => {
             }>
               <Route path="dashboard" element={<IndividualDashboard />} />
               <Route path="measurements" element={<div>My Measurements</div>} />
+              <Route path="measurements/new" element={<div>New Measurement</div>} />
+              <Route path="measurements/:measurementId" element={<div>Measurement Details</div>} />
               <Route path="products" element={<div>Product Catalog</div>} />
               <Route path="products/:productId" element={<div>Product Details</div>} />
               <Route path="orders" element={<div>My Orders</div>} />
+              <Route path="orders/new" element={<div>Place Order</div>} />
+              <Route path="orders/:orderId" element={<div>Order Details</div>} />
               <Route path="profile" element={<div>Profile Settings</div>} />
               <Route index element={<Navigate to="dashboard" replace />} />
             </Route>
@@ -105,8 +127,7 @@ const App = () => {
           </Routes>
           
           {/* Toast Notifications */}
-          <Toaster />
-          <Sonner position="bottom-right" />
+          <Toaster position="top-right" />
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>
