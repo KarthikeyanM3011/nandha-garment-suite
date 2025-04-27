@@ -1,30 +1,49 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { productService } from '@/services/api';
-import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { DataState } from '@/components/ui/data-state';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Plus, Edit, Trash, Image } from 'lucide-react';
-import { z } from 'zod';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Pencil, Plus, Trash2, MoreHorizontal } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { DataState } from '@/components/ui/data-state';
 
 // Define types
 interface Product {
   id: string;
   name: string;
   category_id: string;
-  description: string;
+  description?: string;
   price: number;
-  image: string;
+  image?: string;
   created_at: string;
   updated_at: string;
   category_name: string;
@@ -33,557 +52,578 @@ interface Product {
 interface Category {
   id: string;
   name: string;
-  description: string;
+  description?: string;
   created_at: string;
   updated_at: string;
 }
 
-// Define form schemas
-const productFormSchema = z.object({
-  name: z.string().min(2, { message: "Product name must be at least 2 characters" }),
-  category_id: z.string().uuid({ message: "Please select a category" }),
-  price: z.coerce.number().positive({ message: "Price must be a positive number" }),
-  description: z.string().optional(),
-  image: z.string().optional(),
-});
-
-const categoryFormSchema = z.object({
-  name: z.string().min(2, { message: "Category name must be at least 2 characters" }),
-  description: z.string().optional(),
-});
-
 const Products = () => {
-  const { userData } = useAuth();
-  const queryClient = useQueryClient();
-  const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState('products');
+  const [isAddProductDialogOpen, setIsAddProductDialogOpen] = useState(false);
+  const [isEditProductDialogOpen, setIsEditProductDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-
-  // Fetch products
-  const { data: products, isLoading: isProductsLoading, error: productsError } = useQuery({
-    queryKey: ['products'],
-    queryFn: async () => {
-      try {
-        const response = await productService.getAllProducts();
-        return response.data.products || [];
-      } catch (err) {
-        console.error('Failed to fetch products:', err);
-        throw new Error('Failed to fetch products');
-      }
-    }
+  const [isAddCategoryDialogOpen, setIsAddCategoryDialogOpen] = useState(false);
+  const [newCategory, setNewCategory] = useState({ name: '', description: '' });
+  const [newProduct, setNewProduct] = useState({
+    name: '',
+    category_id: '',
+    description: '',
+    price: 0,
+    image: '',
+  });
+  const [editProduct, setEditProduct] = useState({
+    id: '',
+    name: '',
+    category_id: '',
+    description: '',
+    price: 0,
+    image: '',
   });
 
-  // Fetch product categories
-  const { data: categories, isLoading: isCategoriesLoading, error: categoriesError } = useQuery({
+  const queryClient = useQueryClient();
+
+  // Fetch products
+  const {
+    data: productsData,
+    isLoading: productsLoading,
+    error: productsError,
+  } = useQuery({
+    queryKey: ['products'],
+    queryFn: async () => {
+      const response = await productService.getAllProducts();
+      return response.data.products || [];
+    },
+  });
+
+  // Fetch categories
+  const {
+    data: categoriesData,
+    isLoading: categoriesLoading,
+    error: categoriesError,
+  } = useQuery({
     queryKey: ['productCategories'],
     queryFn: async () => {
-      try {
-        const response = await productService.getProductCategories();
-        return response.data.categories || [];
-      } catch (err) {
-        console.error('Failed to fetch product categories:', err);
-        throw new Error('Failed to fetch product categories');
-      }
-    }
+      const response = await productService.getProductCategories();
+      return response.data.categories || [];
+    },
   });
 
   // Create product mutation
   const createProductMutation = useMutation({
-    mutationFn: async (data: any) => {
-      if (!userData?.id) throw new Error('User ID is required');
-      return await productService.createProduct({
-        ...data,
-        created_by: userData.id
+    mutationFn: (productData: {
+      name: string;
+      category_id: string;
+      price: number;
+      description?: string;
+      image?: string;
+    }) => {
+      return productService.createProduct(productData);
+    },
+    onSuccess: () => {
+      setIsAddProductDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      toast.success('Product added successfully');
+      setNewProduct({
+        name: '',
+        category_id: '',
+        description: '',
+        price: 0,
+        image: '',
       });
     },
-    onSuccess: () => {
-      toast.success('Product created successfully');
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-      setIsProductDialogOpen(false);
-      productForm.reset();
+    onError: (error) => {
+      console.error('Failed to create product', error);
+      toast.error('Failed to add product');
     },
-    onError: (error: any) => {
-      toast.error(`Failed to create product: ${error.message}`);
-    }
   });
 
-  // Update product mutation with required fields
+  // Update product mutation
   const updateProductMutation = useMutation({
-    mutationFn: async ({ productId, data }: { productId: string, data: { name: string; category_id: string; price: number; description?: string; image?: string } }) => {
-      return await productService.updateProduct(productId, data);
+    mutationFn: (productData: {
+      id: string;
+      name?: string;
+      category_id?: string;
+      description?: string;
+      price?: number;
+      image?: string;
+    }) => {
+      const { id, ...data } = productData;
+      return productService.updateProduct(id, data);
     },
     onSuccess: () => {
-      toast.success('Product updated successfully');
+      setIsEditProductDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ['products'] });
-      setIsEditDialogOpen(false);
-      setSelectedProduct(null);
+      toast.success('Product updated successfully');
     },
-    onError: (error: any) => {
-      toast.error(`Failed to update product: ${error.message}`);
-    }
+    onError: (error) => {
+      console.error('Failed to update product', error);
+      toast.error('Failed to update product');
+    },
+  });
+
+  // Create category mutation
+  const createCategoryMutation = useMutation({
+    mutationFn: (categoryData: { name: string; description?: string }) => {
+      return productService.createProductCategory(categoryData);
+    },
+    onSuccess: () => {
+      setIsAddCategoryDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['productCategories'] });
+      toast.success('Category added successfully');
+      setNewCategory({ name: '', description: '' });
+    },
+    onError: (error) => {
+      console.error('Failed to create category', error);
+      toast.error('Failed to add category');
+    },
   });
 
   // Delete product mutation
   const deleteProductMutation = useMutation({
-    mutationFn: async (productId: string) => {
-      return await productService.deleteProduct(productId);
+    mutationFn: (productId: string) => {
+      return productService.deleteProduct(productId);
     },
     onSuccess: () => {
-      toast.success('Product deleted successfully');
       queryClient.invalidateQueries({ queryKey: ['products'] });
+      toast.success('Product deleted successfully');
     },
-    onError: (error: any) => {
-      toast.error(`Failed to delete product: ${error.message}`);
-    }
-  });
-
-  // Create category mutation with required fields
-  const createCategoryMutation = useMutation({
-    mutationFn: async (data: { name: string; description?: string }) => {
-      return await productService.createCategory(data);
-    },
-    onSuccess: () => {
-      toast.success('Category created successfully');
-      queryClient.invalidateQueries({ queryKey: ['productCategories'] });
-      setIsCategoryDialogOpen(false);
-      categoryForm.reset();
-    },
-    onError: (error: any) => {
-      toast.error(`Failed to create category: ${error.message}`);
-    }
-  });
-
-  // Delete category mutation
-  const deleteCategoryMutation = useMutation({
-    mutationFn: async (categoryId: string) => {
-      return await productService.deleteCategory(categoryId);
-    },
-    onSuccess: () => {
-      toast.success('Category deleted successfully');
-      queryClient.invalidateQueries({ queryKey: ['productCategories'] });
-    },
-    onError: (error: any) => {
-      toast.error(`Failed to delete category: ${error.message}`);
-    }
-  });
-
-  // Product form setup
-  const productForm = useForm<z.infer<typeof productFormSchema>>({
-    resolver: zodResolver(productFormSchema),
-    defaultValues: {
-      name: '',
-      category_id: '',
-      price: 0,
-      description: '',
-      image: '',
+    onError: (error) => {
+      console.error('Failed to delete product', error);
+      toast.error('Failed to delete product');
     },
   });
 
-  // Category form setup
-  const categoryForm = useForm<z.infer<typeof categoryFormSchema>>({
-    resolver: zodResolver(categoryFormSchema),
-    defaultValues: {
-      name: '',
-      description: '',
-    },
-  });
-
-  // Handle product form submission
-  const onProductSubmit = (data: z.infer<typeof productFormSchema>) => {
-    createProductMutation.mutate(data);
+  // Format price
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+    }).format(price);
   };
 
-  // Update product form submission handler
-  const handleUpdateProduct = (data: z.infer<typeof productFormSchema>) => {
-    if (!selectedProduct?.id) return;
-  
-    // Ensure required fields are present
-    const updateData = {
-      name: data.name,
-      category_id: data.category_id,
-      price: data.price,
-      description: data.description,
-      image: data.image
-    };
-    
-    updateProductMutation.mutate({ 
-      productId: selectedProduct.id,
-      data: updateData
+  // Handle product form submission
+  const handleAddProduct = (e: React.FormEvent) => {
+    e.preventDefault();
+    createProductMutation.mutate({
+      ...newProduct,
+      price: Number(newProduct.price),
+    });
+  };
+
+  // Handle edit product form submission
+  const handleEditProduct = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateProductMutation.mutate({
+      ...editProduct,
+      price: Number(editProduct.price),
     });
   };
 
   // Handle category form submission
-  const handleCreateCategory = (data: z.infer<typeof categoryFormSchema>) => {
-    // Ensure required field is present
-    const categoryData = {
-      name: data.name,
-      description: data.description
-    };
-    
-    createCategoryMutation.mutate(categoryData);
+  const handleAddCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    createCategoryMutation.mutate(newCategory);
   };
 
-  // Handle delete product
+  // Handle product deletion
   const handleDeleteProduct = (productId: string) => {
-    if (confirm('Are you sure you want to delete this product?')) {
+    if (window.confirm('Are you sure you want to delete this product?')) {
       deleteProductMutation.mutate(productId);
     }
   };
 
-  // Handle delete category
-  const handleDeleteCategory = (categoryId: string) => {
-    if (confirm('Are you sure you want to delete this category?')) {
-      deleteCategoryMutation.mutate(categoryId);
-    }
+  const handleEditClick = (product: Product) => {
+    setSelectedProduct(product);
+    setEditProduct({
+      id: product.id,
+      name: product.name,
+      category_id: product.category_id,
+      description: product.description || '',
+      price: product.price,
+      image: product.image || '',
+    });
+    setIsEditProductDialogOpen(true);
   };
-
-  // Filter products based on search term
-  const filteredProducts = products ? products.filter((product: Product) => {
-    return searchTerm === '' ||
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.category_name.toLowerCase().includes(searchTerm.toLowerCase());
-  }) : [];
 
   return (
     <div className="space-y-8 animate-fade-in">
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-gray-900">Products</h2>
-          <p className="text-muted-foreground">Manage all products in the system</p>
-        </div>
-        <div>
-          <Button onClick={() => setIsCategoryDialogOpen(true)}>
-            Add Category
-          </Button>
-          <Button className="ml-2" onClick={() => setIsProductDialogOpen(true)}>
-            Add Product
-          </Button>
+          <h2 className="text-3xl font-bold tracking-tight">Products Management</h2>
+          <p className="text-muted-foreground">Manage your product catalog and categories</p>
         </div>
       </div>
 
-      {/* Search input */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-        <Input
-          placeholder="Search products by name or description"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-10"
-        />
-      </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="mb-8">
+          <TabsTrigger value="products" className="px-8">
+            Products
+          </TabsTrigger>
+          <TabsTrigger value="categories" className="px-8">
+            Categories
+          </TabsTrigger>
+        </TabsList>
 
-      <DataState
-        isLoading={isProductsLoading || isCategoriesLoading}
-        error={productsError || categoriesError}
-        isEmpty={!filteredProducts || filteredProducts.length === 0}
-        emptyMessage="No products found. Click 'Add Product' to create one."
-      >
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {filteredProducts.map((product: Product) => (
-            <Card key={product.id} className="overflow-hidden transition-all hover:shadow-md">
-              {product.image && (
-                <div className="w-full h-48 overflow-hidden bg-gray-100">
-                  <img
-                    src={product.image}
-                    alt={product.name}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.src = 'https://placehold.co/300x200?text=No+Image';
-                    }}
-                  />
-                </div>
-              )}
-              <CardHeader className="pb-2">
-                <div className="flex justify-between">
-                  <CardTitle className="text-xl font-bold">{product.name}</CardTitle>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                    onClick={() => handleDeleteProduct(product.id)}
-                  >
-                    <Trash size={18} />
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground text-sm mb-4">
-                  {product.description || "No description available"}
-                </p>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Category:</span>
-                  <span className="font-medium">{product.category_name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Price:</span>
-                  <span className="font-medium">₹{product.price}</span>
-                </div>
-              </CardContent>
-              <CardFooter className="border-t bg-gray-50 py-3">
-                <div className="text-xs text-muted-foreground w-full flex justify-between">
-                  <span>Created: {new Date(product.created_at).toLocaleDateString()}</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8"
-                    onClick={() => {
-                      setSelectedProduct(product);
-                      productForm.reset({
-                        name: product.name,
-                        category_id: product.category_id,
-                        price: product.price,
-                        description: product.description,
-                        image: product.image,
-                      });
-                      setIsEditDialogOpen(true);
-                    }}
-                  >
-                    <Edit size={14} className="mr-1" /> Edit
-                  </Button>
-                </div>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
-      </DataState>
+        {/* Products Tab */}
+        <TabsContent value="products" className="space-y-6">
+          <div className="flex justify-end">
+            <Button onClick={() => setIsAddProductDialogOpen(true)} className="flex gap-2">
+              <Plus size={18} />
+              Add Product
+            </Button>
+          </div>
 
-      {/* Product Dialog */}
-      <Dialog open={isProductDialogOpen} onOpenChange={setIsProductDialogOpen}>
+          <Card>
+            <CardHeader>
+              <CardTitle>Products</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DataState
+                isLoading={productsLoading}
+                error={productsError}
+                isEmpty={!productsData || productsData.length === 0}
+                emptyMessage="No products available. Add a new product to get started."
+              >
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[250px]">Name</TableHead>
+                        <TableHead>Category</TableHead>
+                        <TableHead>Price</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {productsData &&
+                        productsData.map((product: Product) => (
+                          <TableRow key={product.id}>
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                {product.image && (
+                                  <img
+                                    src={product.image}
+                                    alt={product.name}
+                                    className="h-10 w-10 rounded object-cover"
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).src =
+                                        'https://placehold.co/100?text=Product';
+                                    }}
+                                  />
+                                )}
+                                <span className="font-medium">{product.name}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{product.category_name}</Badge>
+                            </TableCell>
+                            <TableCell>{formatPrice(product.price)}</TableCell>
+                            <TableCell className="max-w-[300px] truncate">
+                              {product.description || 'No description'}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => handleEditClick(product)}>
+                                    <Pencil className="mr-2 h-4 w-4" />
+                                    Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleDeleteProduct(product.id)}>
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </DataState>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Categories Tab */}
+        <TabsContent value="categories" className="space-y-6">
+          <div className="flex justify-end">
+            <Button onClick={() => setIsAddCategoryDialogOpen(true)} className="flex gap-2">
+              <Plus size={18} />
+              Add Category
+            </Button>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Product Categories</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DataState
+                isLoading={categoriesLoading}
+                error={categoriesError}
+                isEmpty={!categoriesData || categoriesData.length === 0}
+                emptyMessage="No categories available. Add a new category to get started."
+              >
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead>Products</TableHead>
+                        <TableHead>Created</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {categoriesData &&
+                        categoriesData.map((category: Category) => {
+                          const productCount = productsData
+                            ? productsData.filter(
+                                (product: Product) => product.category_id === category.id
+                              ).length
+                            : 0;
+                          return (
+                            <TableRow key={category.id}>
+                              <TableCell className="font-medium">{category.name}</TableCell>
+                              <TableCell>{category.description || 'No description'}</TableCell>
+                              <TableCell>{productCount} products</TableCell>
+                              <TableCell>
+                                {new Date(category.created_at).toLocaleDateString()}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </DataState>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Add Product Dialog */}
+      <Dialog open={isAddProductDialogOpen} onOpenChange={setIsAddProductDialogOpen}>
         <DialogContent className="sm:max-w-[550px]">
           <DialogHeader>
-            <DialogTitle>Create New Product</DialogTitle>
+            <DialogTitle>Add New Product</DialogTitle>
             <DialogDescription>
-              Enter the details for the new product. Click save when you're done.
+              Fill in the details to create a new product.
             </DialogDescription>
           </DialogHeader>
-          <Form {...productForm}>
-            <form onSubmit={productForm.handleSubmit(onProductSubmit)} className="space-y-4 pt-4">
-              <FormField
-                control={productForm.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Product Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter product name" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={productForm.control}
-                name="category_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Category</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a category" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {categories && categories.map((category: Category) => (
-                          <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={productForm.control}
-                name="price"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Price</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter price" type="number" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={productForm.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter description" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={productForm.control}
-                name="image"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Image URL</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter image URL" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <DialogFooter>
-                <Button type="submit" disabled={createProductMutation.isPending}>
-                  {createProductMutation.isPending ? 'Creating...' : 'Create Product'}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
+          <form onSubmit={handleAddProduct}>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="name">Name</Label>
+                <Input
+                  id="name"
+                  required
+                  value={newProduct.name}
+                  onChange={(e) =>
+                    setNewProduct({ ...newProduct, name: e.target.value })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="category">Category</Label>
+                <select
+                  id="category"
+                  required
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  value={newProduct.category_id}
+                  onChange={(e) =>
+                    setNewProduct({ ...newProduct, category_id: e.target.value })
+                  }
+                >
+                  <option value="">Select a category</option>
+                  {categoriesData &&
+                    categoriesData.map((category: Category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="price">Price (INR)</Label>
+                <Input
+                  id="price"
+                  required
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={newProduct.price}
+                  onChange={(e) =>
+                    setNewProduct({
+                      ...newProduct,
+                      price: parseFloat(e.target.value),
+                    })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  value={newProduct.description}
+                  onChange={(e) =>
+                    setNewProduct({ ...newProduct, description: e.target.value })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="image">Image URL</Label>
+                <Input
+                  id="image"
+                  value={newProduct.image}
+                  onChange={(e) =>
+                    setNewProduct({ ...newProduct, image: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="submit">
+                Add Product
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
       {/* Edit Product Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+      <Dialog open={isEditProductDialogOpen} onOpenChange={setIsEditProductDialogOpen}>
         <DialogContent className="sm:max-w-[550px]">
           <DialogHeader>
             <DialogTitle>Edit Product</DialogTitle>
             <DialogDescription>
-              Edit the details for the product. Click save when you're done.
+              Update the product details.
             </DialogDescription>
           </DialogHeader>
-          <Form {...productForm}>
-            <form onSubmit={productForm.handleSubmit(handleUpdateProduct)} className="space-y-4 pt-4">
-              <FormField
-                control={productForm.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Product Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter product name" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={productForm.control}
-                name="category_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Category</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a category" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {categories && categories.map((category: Category) => (
-                          <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={productForm.control}
-                name="price"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Price</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter price" type="number" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={productForm.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter description" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={productForm.control}
-                name="image"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Image URL</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter image URL" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <DialogFooter>
-                <Button type="submit" disabled={updateProductMutation.isPending}>
-                  {updateProductMutation.isPending ? 'Updating...' : 'Update Product'}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
+          <form onSubmit={handleEditProduct}>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-name">Name</Label>
+                <Input
+                  id="edit-name"
+                  required
+                  value={editProduct.name}
+                  onChange={(e) =>
+                    setEditProduct({ ...editProduct, name: e.target.value })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-category">Category</Label>
+                <select
+                  id="edit-category"
+                  required
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  value={editProduct.category_id}
+                  onChange={(e) =>
+                    setEditProduct({ ...editProduct, category_id: e.target.value })
+                  }
+                >
+                  <option value="">Select a category</option>
+                  {categoriesData &&
+                    categoriesData.map((category: Category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-price">Price (INR)</Label>
+                <Input
+                  id="edit-price"
+                  required
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editProduct.price}
+                  onChange={(e) =>
+                    setEditProduct({
+                      ...editProduct,
+                      price: parseFloat(e.target.value),
+                    })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-description">Description</Label>
+                <Textarea
+                  id="edit-description"
+                  value={editProduct.description}
+                  onChange={(e) =>
+                    setEditProduct({ ...editProduct, description: e.target.value })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-image">Image URL</Label>
+                <Input
+                  id="edit-image"
+                  value={editProduct.image}
+                  onChange={(e) =>
+                    setEditProduct({ ...editProduct, image: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="submit">
+                Update Product
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
-      {/* Category Dialog */}
-      <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
-        <DialogContent className="sm:max-w-[550px]">
+      {/* Add Category Dialog */}
+      <Dialog open={isAddCategoryDialogOpen} onOpenChange={setIsAddCategoryDialogOpen}>
+        <DialogContent className="sm:max-w-[450px]">
           <DialogHeader>
-            <DialogTitle>Create New Category</DialogTitle>
+            <DialogTitle>Add New Category</DialogTitle>
             <DialogDescription>
-              Enter the details for the new category. Click save when you're done.
+              Create a new product category.
             </DialogDescription>
           </DialogHeader>
-          <Form {...categoryForm}>
-            <form onSubmit={categoryForm.handleSubmit(handleCreateCategory)} className="space-y-4 pt-4">
-              <FormField
-                control={categoryForm.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Category Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter category name" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={categoryForm.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter description" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <DialogFooter>
-                <Button type="submit" disabled={createCategoryMutation.isPending}>
-                  {createCategoryMutation.isPending ? 'Creating...' : 'Create Category'}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
+          <form onSubmit={handleAddCategory}>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="category-name">Name</Label>
+                <Input
+                  id="category-name"
+                  required
+                  value={newCategory.name}
+                  onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="category-description">Description</Label>
+                <Textarea
+                  id="category-description"
+                  value={newCategory.description}
+                  onChange={(e) =>
+                    setNewCategory({ ...newCategory, description: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="submit">
+                Add Category
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
