@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { userService } from '@/services/api';
+import { organizationService } from '@/services/api-extensions';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { DataState } from '@/components/ui/data-state';
@@ -51,7 +52,7 @@ const Organizations = () => {
     queryKey: ['organizations'],
     queryFn: async () => {
       try {
-        const response = await userService.getAllOrganizations();
+        const response = await organizationService.getAllOrganizations();
         return response.data.organizations || [];
       } catch (err) {
         console.error('Failed to fetch organizations:', err);
@@ -83,7 +84,7 @@ const Organizations = () => {
   // Delete organization mutation
   const deleteOrgMutation = useMutation({
     mutationFn: async (orgId: string) => {
-      return await userService.deleteOrganization(orgId);
+      return await organizationService.deleteOrganization(orgId);
     },
     onSuccess: () => {
       toast.success('Organization deleted successfully');

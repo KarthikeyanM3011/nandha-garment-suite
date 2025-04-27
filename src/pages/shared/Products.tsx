@@ -9,7 +9,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, ShoppingCart, Plus, Minus, Package } from 'lucide-react';
+import { Search, ShoppingCart, Plus, Minus, Package, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 // Define types

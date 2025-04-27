@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Pencil, Trash2, Search, UserPlus, Users, Building } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, UserPlus, Users as UsersIcon, Building } from 'lucide-react';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -255,7 +255,7 @@ const Users = () => {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
           <TabsList>
             <TabsTrigger value="users" className="gap-2">
-              <Users size={16} />
+              <UsersIcon size={16} />
               Users
             </TabsTrigger>
             <TabsTrigger value="admins" className="gap-2">

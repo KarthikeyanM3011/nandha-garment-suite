@@ -1,15 +1,16 @@
-
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { productService } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { DataState, CardSkeleton } from '@/components/ui/data-state';
+import { DataState } from '@/components/ui/data-state';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Pencil, Trash2, Tag } from 'lucide-react';
+import { Search, Plus, Edit, Trash, Image } from 'lucide-react';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -40,8 +41,8 @@ interface Category {
 // Define form schemas
 const productFormSchema = z.object({
   name: z.string().min(2, { message: "Product name must be at least 2 characters" }),
-  category_id: z.string().min(1, { message: "Category is required" }),
-  price: z.coerce.number().positive({ message: "Price must be positive" }),
+  category_id: z.string().uuid({ message: "Please select a category" }),
+  price: z.coerce.number().positive({ message: "Price must be a positive number" }),
   description: z.string().optional(),
   image: z.string().optional(),
 });
@@ -52,27 +53,20 @@ const categoryFormSchema = z.object({
 });
 
 const Products = () => {
+  const { userData } = useAuth();
   const queryClient = useQueryClient();
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   // Fetch products
-  const { 
-    data: products, 
-    isLoading: isProductsLoading, 
-    error: productsError 
-  } = useQuery({
-    queryKey: ['products', selectedCategory],
+  const { data: products, isLoading: isProductsLoading, error: productsError } = useQuery({
+    queryKey: ['products'],
     queryFn: async () => {
       try {
-        let response;
-        if (selectedCategory === 'all') {
-          response = await productService.getAllProducts();
-        } else {
-          response = await productService.getProductsByCategory(selectedCategory);
-        }
+        const response = await productService.getAllProducts();
         return response.data.products || [];
       } catch (err) {
         console.error('Failed to fetch products:', err);
@@ -81,12 +75,8 @@ const Products = () => {
     }
   });
 
-  // Fetch categories
-  const { 
-    data: categories, 
-    isLoading: isCategoriesLoading, 
-    error: categoriesError 
-  } = useQuery({
+  // Fetch product categories
+  const { data: categories, isLoading: isCategoriesLoading, error: categoriesError } = useQuery({
     queryKey: ['productCategories'],
     queryFn: async () => {
       try {
@@ -101,8 +91,12 @@ const Products = () => {
 
   // Create product mutation
   const createProductMutation = useMutation({
-    mutationFn: async (data: z.infer<typeof productFormSchema>) => {
-      return await productService.createProduct(data);
+    mutationFn: async (data: any) => {
+      if (!userData?.id) throw new Error('User ID is required');
+      return await productService.createProduct({
+        ...data,
+        created_by: userData.id
+      });
     },
     onSuccess: () => {
       toast.success('Product created successfully');
@@ -112,6 +106,22 @@ const Products = () => {
     },
     onError: (error: any) => {
       toast.error(`Failed to create product: ${error.message}`);
+    }
+  });
+
+  // Update product mutation with required fields
+  const updateProductMutation = useMutation({
+    mutationFn: async ({ productId, data }: { productId: string, data: { name: string; category_id: string; price: number; description?: string; image?: string } }) => {
+      return await productService.updateProduct(productId, data);
+    },
+    onSuccess: () => {
+      toast.success('Product updated successfully');
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      setIsEditDialogOpen(false);
+      setSelectedProduct(null);
+    },
+    onError: (error: any) => {
+      toast.error(`Failed to update product: ${error.message}`);
     }
   });
 
@@ -129,10 +139,10 @@ const Products = () => {
     }
   });
 
-  // Create category mutation
+  // Create category mutation with required fields
   const createCategoryMutation = useMutation({
-    mutationFn: async (data: z.infer<typeof categoryFormSchema>) => {
-      return await productService.createProductCategory(data);
+    mutationFn: async (data: { name: string; description?: string }) => {
+      return await productService.createCategory(data);
     },
     onSuccess: () => {
       toast.success('Category created successfully');
@@ -142,6 +152,20 @@ const Products = () => {
     },
     onError: (error: any) => {
       toast.error(`Failed to create category: ${error.message}`);
+    }
+  });
+
+  // Delete category mutation
+  const deleteCategoryMutation = useMutation({
+    mutationFn: async (categoryId: string) => {
+      return await productService.deleteCategory(categoryId);
+    },
+    onSuccess: () => {
+      toast.success('Category deleted successfully');
+      queryClient.invalidateQueries({ queryKey: ['productCategories'] });
+    },
+    onError: (error: any) => {
+      toast.error(`Failed to delete category: ${error.message}`);
     }
   });
 
@@ -171,9 +195,34 @@ const Products = () => {
     createProductMutation.mutate(data);
   };
 
+  // Update product form submission handler
+  const handleUpdateProduct = (data: z.infer<typeof productFormSchema>) => {
+    if (!selectedProduct?.id) return;
+  
+    // Ensure required fields are present
+    const updateData = {
+      name: data.name,
+      category_id: data.category_id,
+      price: data.price,
+      description: data.description,
+      image: data.image
+    };
+    
+    updateProductMutation.mutate({ 
+      productId: selectedProduct.id,
+      data: updateData
+    });
+  };
+
   // Handle category form submission
-  const onCategorySubmit = (data: z.infer<typeof categoryFormSchema>) => {
-    createCategoryMutation.mutate(data);
+  const handleCreateCategory = (data: z.infer<typeof categoryFormSchema>) => {
+    // Ensure required field is present
+    const categoryData = {
+      name: data.name,
+      description: data.description
+    };
+    
+    createCategoryMutation.mutate(categoryData);
   };
 
   // Handle delete product
@@ -183,13 +232,20 @@ const Products = () => {
     }
   };
 
-  // Format price
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-    }).format(price);
+  // Handle delete category
+  const handleDeleteCategory = (categoryId: string) => {
+    if (confirm('Are you sure you want to delete this category?')) {
+      deleteCategoryMutation.mutate(categoryId);
+    }
   };
+
+  // Filter products based on search term
+  const filteredProducts = products ? products.filter((product: Product) => {
+    return searchTerm === '' ||
+      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.category_name.toLowerCase().includes(searchTerm.toLowerCase());
+  }) : [];
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -198,244 +254,338 @@ const Products = () => {
           <h2 className="text-3xl font-bold tracking-tight text-gray-900">Products</h2>
           <p className="text-muted-foreground">Manage all products in the system</p>
         </div>
-        <div className="flex gap-3">
-          <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="gap-2">
-                <Tag size={16} />
-                Add Category
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>Create New Category</DialogTitle>
-                <DialogDescription>
-                  Add a new product category to the system.
-                </DialogDescription>
-              </DialogHeader>
-              <Form {...categoryForm}>
-                <form onSubmit={categoryForm.handleSubmit(onCategorySubmit)} className="space-y-4 pt-4">
-                  <FormField
-                    control={categoryForm.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Category Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Enter category name" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={categoryForm.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Description (Optional)</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Enter category description" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <DialogFooter>
-                    <Button type="submit" disabled={createCategoryMutation.isPending}>
-                      {createCategoryMutation.isPending ? 'Creating...' : 'Create Category'}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog open={isProductDialogOpen} onOpenChange={setIsProductDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus size={16} />
-                Add Product
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[550px]">
-              <DialogHeader>
-                <DialogTitle>Create New Product</DialogTitle>
-                <DialogDescription>
-                  Add a new product to the system. Fill in all required fields.
-                </DialogDescription>
-              </DialogHeader>
-              <Form {...productForm}>
-                <form onSubmit={productForm.handleSubmit(onProductSubmit)} className="space-y-4 pt-4">
-                  <FormField
-                    control={productForm.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Product Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Enter product name" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={productForm.control}
-                    name="category_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Category</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select a category" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {categories?.map((category: Category) => (
-                              <SelectItem key={category.id} value={category.id}>
-                                {category.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={productForm.control}
-                    name="price"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Price (₹)</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Enter price" type="number" step="0.01" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={productForm.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Description (Optional)</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Enter product description" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={productForm.control}
-                    name="image"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Image URL (Optional)</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Enter image URL" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <DialogFooter>
-                    <Button type="submit" disabled={createProductMutation.isPending}>
-                      {createProductMutation.isPending ? 'Creating...' : 'Create Product'}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
+        <div>
+          <Button onClick={() => setIsCategoryDialogOpen(true)}>
+            Add Category
+          </Button>
+          <Button className="ml-2" onClick={() => setIsProductDialogOpen(true)}>
+            Add Product
+          </Button>
         </div>
       </div>
 
-      <Tabs defaultValue="all" className="w-full">
-        <TabsList>
-          <TabsTrigger value="all" onClick={() => setSelectedCategory('all')}>
-            All Products
-          </TabsTrigger>
-          {categories && categories.map((category: Category) => (
-            <TabsTrigger 
-              key={category.id} 
-              value={category.id}
-              onClick={() => setSelectedCategory(category.id)}
-            >
-              {category.name}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+      {/* Search input */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+        <Input
+          placeholder="Search products by name or description"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="pl-10"
+        />
+      </div>
 
-        <TabsContent value={selectedCategory} className="mt-6">
-          <DataState 
-            isLoading={isProductsLoading} 
-            error={productsError} 
-            isEmpty={!products || products.length === 0}
-            emptyMessage="No products found in this category."
-          >
-            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-              {products && products.map((product: Product) => (
-                <Card key={product.id} className="overflow-hidden transition-all hover:shadow-md">
-                  <CardHeader className="pb-2">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-lg">
-                          {product.category_name}
-                        </span>
-                        <CardTitle className="mt-2 text-xl">{product.name}</CardTitle>
-                      </div>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                        onClick={() => handleDeleteProduct(product.id)}
-                      >
-                        <Trash2 size={18} />
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {product.image && (
-                      <div className="w-full h-48 mb-4 overflow-hidden rounded bg-gray-100">
-                        <img 
-                          src={product.image} 
-                          alt={product.name}
-                          className="w-full h-full object-cover" 
-                          onError={(e) => {
-                            e.currentTarget.src = 'https://placehold.co/300x200?text=No+Image';
-                          }}
-                        />
-                      </div>
-                    )}
-                    <p className="text-muted-foreground text-sm mb-3">
-                      {product.description || "No description available"}
-                    </p>
-                    <div className="text-2xl font-bold text-brand-blue">
-                      {formatPrice(product.price)}
-                    </div>
-                  </CardContent>
-                  <CardFooter className="border-t bg-gray-50 py-3">
-                    <div className="text-xs text-muted-foreground w-full flex justify-between items-center">
-                      <span>Added: {new Date(product.created_at).toLocaleDateString()}</span>
-                      <Button variant="outline" size="sm" className="h-8">
-                        <Pencil size={14} className="mr-1" /> Edit
-                      </Button>
-                    </div>
-                  </CardFooter>
-                </Card>
-              ))}
-            </div>
-          </DataState>
-        </TabsContent>
-      </Tabs>
+      <DataState
+        isLoading={isProductsLoading || isCategoriesLoading}
+        error={productsError || categoriesError}
+        isEmpty={!filteredProducts || filteredProducts.length === 0}
+        emptyMessage="No products found. Click 'Add Product' to create one."
+      >
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {filteredProducts.map((product: Product) => (
+            <Card key={product.id} className="overflow-hidden transition-all hover:shadow-md">
+              {product.image && (
+                <div className="w-full h-48 overflow-hidden bg-gray-100">
+                  <img
+                    src={product.image}
+                    alt={product.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.src = 'https://placehold.co/300x200?text=No+Image';
+                    }}
+                  />
+                </div>
+              )}
+              <CardHeader className="pb-2">
+                <div className="flex justify-between">
+                  <CardTitle className="text-xl font-bold">{product.name}</CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                    onClick={() => handleDeleteProduct(product.id)}
+                  >
+                    <Trash size={18} />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground text-sm mb-4">
+                  {product.description || "No description available"}
+                </p>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Category:</span>
+                  <span className="font-medium">{product.category_name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Price:</span>
+                  <span className="font-medium">₹{product.price}</span>
+                </div>
+              </CardContent>
+              <CardFooter className="border-t bg-gray-50 py-3">
+                <div className="text-xs text-muted-foreground w-full flex justify-between">
+                  <span>Created: {new Date(product.created_at).toLocaleDateString()}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    onClick={() => {
+                      setSelectedProduct(product);
+                      productForm.reset({
+                        name: product.name,
+                        category_id: product.category_id,
+                        price: product.price,
+                        description: product.description,
+                        image: product.image,
+                      });
+                      setIsEditDialogOpen(true);
+                    }}
+                  >
+                    <Edit size={14} className="mr-1" /> Edit
+                  </Button>
+                </div>
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+      </DataState>
+
+      {/* Product Dialog */}
+      <Dialog open={isProductDialogOpen} onOpenChange={setIsProductDialogOpen}>
+        <DialogContent className="sm:max-w-[550px]">
+          <DialogHeader>
+            <DialogTitle>Create New Product</DialogTitle>
+            <DialogDescription>
+              Enter the details for the new product. Click save when you're done.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...productForm}>
+            <form onSubmit={productForm.handleSubmit(onProductSubmit)} className="space-y-4 pt-4">
+              <FormField
+                control={productForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Product Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter product name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={productForm.control}
+                name="category_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Category</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a category" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {categories && categories.map((category: Category) => (
+                          <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={productForm.control}
+                name="price"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Price</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter price" type="number" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={productForm.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter description" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={productForm.control}
+                name="image"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Image URL</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter image URL" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="submit" disabled={createProductMutation.isPending}>
+                  {createProductMutation.isPending ? 'Creating...' : 'Create Product'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Product Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[550px]">
+          <DialogHeader>
+            <DialogTitle>Edit Product</DialogTitle>
+            <DialogDescription>
+              Edit the details for the product. Click save when you're done.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...productForm}>
+            <form onSubmit={productForm.handleSubmit(handleUpdateProduct)} className="space-y-4 pt-4">
+              <FormField
+                control={productForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Product Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter product name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={productForm.control}
+                name="category_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Category</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a category" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {categories && categories.map((category: Category) => (
+                          <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={productForm.control}
+                name="price"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Price</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter price" type="number" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={productForm.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter description" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={productForm.control}
+                name="image"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Image URL</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter image URL" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="submit" disabled={updateProductMutation.isPending}>
+                  {updateProductMutation.isPending ? 'Updating...' : 'Update Product'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Category Dialog */}
+      <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
+        <DialogContent className="sm:max-w-[550px]">
+          <DialogHeader>
+            <DialogTitle>Create New Category</DialogTitle>
+            <DialogDescription>
+              Enter the details for the new category. Click save when you're done.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...categoryForm}>
+            <form onSubmit={categoryForm.handleSubmit(handleCreateCategory)} className="space-y-4 pt-4">
+              <FormField
+                control={categoryForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Category Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter category name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={categoryForm.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter description" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="submit" disabled={createCategoryMutation.isPending}>
+                  {createCategoryMutation.isPending ? 'Creating...' : 'Create Category'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
