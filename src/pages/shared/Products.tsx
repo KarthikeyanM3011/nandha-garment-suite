@@ -173,25 +173,25 @@ const Products = () => {
       <div className="flex flex-col sm:flex-row gap-4 items-start">
         {/* Categories tabs */}
         <div className="w-full sm:w-auto sm:min-w-[200px]">
-          <TabsList className="flex sm:flex-col h-auto bg-transparent space-x-1 sm:space-x-0 sm:space-y-1">
-            <TabsTrigger 
-              value="all" 
-              className="w-full justify-start mb-1 data-[state=active]:bg-brand-blue data-[state=active]:text-white"
-              onClick={() => setSelectedCategory('all')}
-            >
-              All Products
-            </TabsTrigger>
-            {!categoriesLoading && categories && categories.map((category: Category) => (
-              <TabsTrigger
-                key={category.id}
-                value={category.id}
-                className="w-full justify-start data-[state=active]:bg-brand-blue data-[state=active]:text-white"
-                onClick={() => setSelectedCategory(category.id)}
+          <Tabs defaultValue="all" value={selectedCategory} onValueChange={setSelectedCategory}>
+            <TabsList className="flex sm:flex-col h-auto bg-transparent space-x-1 sm:space-x-0 sm:space-y-1">
+              <TabsTrigger 
+                value="all" 
+                className="w-full justify-start mb-1 data-[state=active]:bg-brand-blue data-[state=active]:text-white"
               >
-                {category.name}
+                All Products
               </TabsTrigger>
-            ))}
-          </TabsList>
+              {!categoriesLoading && categories && categories.map((category: Category) => (
+                <TabsTrigger
+                  key={category.id}
+                  value={category.id}
+                  className="w-full justify-start data-[state=active]:bg-brand-blue data-[state=active]:text-white"
+                >
+                  {category.name}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
         </div>
 
         <div className="flex-1">

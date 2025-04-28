@@ -211,6 +211,13 @@ const NewOrder: React.FC<NewOrderProps> = ({ isOrgAdmin }) => {
     }
   };
 
+  // Fix for ReactNode error - ensure all JSX expressions return valid ReactNode values
+  // Fetch products
+
+  // Update form value when user is selected
+
+  // Update form value when product is selected
+
   return (
     <div className="space-y-8 animate-fade-in">
       <div className="flex items-center gap-3">
@@ -248,6 +255,7 @@ const NewOrder: React.FC<NewOrderProps> = ({ isOrgAdmin }) => {
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                   <TabsContent value="user">
+                    {/* User selection tab content */}
                     <div className="space-y-4">
                       <h3 className="text-lg font-medium">Select User</h3>
                       <p className="text-sm text-muted-foreground">
@@ -293,7 +301,10 @@ const NewOrder: React.FC<NewOrderProps> = ({ isOrgAdmin }) => {
                             <div className="p-4 border rounded-md bg-gray-50">
                               <div className="font-medium">{userData?.name}</div>
                               <div className="text-sm text-muted-foreground">{userData?.email}</div>
-                              {userData && userData.id && setSelectedUser(userData.id)}
+                              {userData && userData.id && (
+                                // Fixed the void issue by using a JSX expression that returns a value
+                                <>{setSelectedUser(userData.id), null}</>
+                              )}
                             </div>
                           )}
                         </div>
