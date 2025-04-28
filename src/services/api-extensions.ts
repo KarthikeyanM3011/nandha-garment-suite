@@ -1,3 +1,4 @@
+
 import axios from 'axios';
 
 const api = axios.create({
@@ -47,15 +48,30 @@ export const productService = {
   getProductById: (id: string) => api.get(`/products/${id}`),
   updateProduct: (id: string, data: any) => api.put(`/products/${id}`, data),
   deleteProduct: (id: string) => api.delete(`/products/${id}`),
+  
+  getProductCategories: () => api.get('/product-categories'),
+  createProductCategory: (data: { name: string; description?: string }) => api.post('/product-categories', data),
+  updateProductCategory: (categoryId: string, data: { name?: string; description?: string }) => api.put(`/product-categories/${categoryId}`, data),
+  deleteProductCategory: (categoryId: string) => api.delete(`/product-categories/${categoryId}`),
 };
 
 // Order service
 export const orderService = {
   getOrders: (queryString: string) => api.get(`/orders?${queryString}`),
   getOrderById: (id: string) => api.get(`/orders/${id}`),
-  createOrder: (data: any) => api.post('/orders', data),
-  updateOrderStatus: (id: string, data: { status: string }) => api.put(`/orders/${id}/status`, data),
+  createOrder: (data: { 
+    user_id: string; 
+    user_type: string; 
+    product_id?: string;
+    org_user_id?: string; 
+    measurement_id?: string;
+    quantity?: number;
+    notes?: string;
+    total_amount: number; 
+  }) => api.post('/orders', data),
+  updateOrderStatus: (id: string, status: { status: string }) => api.put(`/orders/${id}/status`, status),
   deleteOrder: (id: string) => api.delete(`/orders/${id}`),
+  getAllOrders: () => api.get('/orders'),
 };
 
 // Measurement service extensions
@@ -66,8 +82,10 @@ export const measurementService = {
   updateMeasurementType: (typeId: string, data: { name?: string; description?: string }) => api.put(`/measurement-types/${typeId}`, data),
   deleteMeasurementType: (typeId: string) => api.delete(`/measurement-types/${typeId}`),
   
-  getMeasurements: (userId: string, userType: string) => api.get(`/measurements?user_id=${userId}&user_type=${userType}`),
+  // Updated measurement methods to align with errors
   getMeasurement: (measurementId: string) => api.get(`/measurements/${measurementId}`),
+  getMeasurements: (userId: string, userType: string) => api.get(`/measurements?user_id=${userId}&user_type=${userType}`),
+  getMeasurementsByUser: (userId: string, userType: string) => api.get(`/measurements?user_id=${userId}&user_type=${userType}`),
   createMeasurement: (data: {
     user_id: string;
     user_type: string;
@@ -89,6 +107,7 @@ export const userService = {
   deleteUser: (id: string) => api.delete(`/users/${id}`),
   
   getAllOrgUsers: (orgId: string) => api.get(`/org-users?org_id=${orgId}`),
+  getOrgUsers: (orgId: string) => api.get(`/org-users?org_id=${orgId}`),
   createOrgUser: (data: {
     org_id: string;
     name: string;

@@ -2,24 +2,19 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { orderService } from '@/services/api';
+import { orderService } from '@/services/api-extensions';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { DataState } from '@/components/ui/data-state';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Form } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
 import { ClipboardList, Plus, Eye, Pencil, Trash2, Filter, ChevronDown, ChevronUp } from 'lucide-react';
 import { format } from 'date-fns';
-import { z } from 'zod';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 
 interface OrdersProps {
   isOrgAdmin: boolean;
@@ -55,14 +50,6 @@ const Orders: React.FC<OrdersProps> = ({ isOrgAdmin }) => {
   const [sortField, setSortField] = useState<string>('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
-  // Determine the query parameters based on user role
-  let queryParams = {};
-  if (isOrgAdmin) {
-    queryParams = { org_id: userData?.org_id };
-  } else {
-    queryParams = { user_id: userData?.id };
-  }
-
   // Fetch orders
   const { 
     data: orders, 
@@ -85,6 +72,9 @@ const Orders: React.FC<OrdersProps> = ({ isOrgAdmin }) => {
           queryString += `status=${statusFilter}`;
         }
         
+        // Remove trailing & if present
+        queryString = queryString.endsWith('&') ? queryString.slice(0, -1) : queryString;
+        
         const response = await orderService.getOrders(queryString);
         return response.data.orders || [];
       } catch (err) {
@@ -98,9 +88,7 @@ const Orders: React.FC<OrdersProps> = ({ isOrgAdmin }) => {
   // Update order status mutation
   const updateStatusMutation = useMutation({
     mutationFn: async (data: { orderId: string; status: string }) => {
-      return await orderService.updateOrderStatus(data.orderId, {
-        status: data.status
-      });
+      return await orderService.updateOrderStatus(data.orderId, { status: data.status });
     },
     onSuccess: () => {
       toast.success('Order status updated successfully');

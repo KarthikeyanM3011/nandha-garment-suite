@@ -14,7 +14,7 @@ import { Plus, Edit, Trash2, UserPlus } from 'lucide-react';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Switch } from '@/components/ui/switch';
 
 // Define the user schema
@@ -77,11 +77,20 @@ const OrgAdminUsers = () => {
       if (!orgId) throw new Error('Organization ID is required');
       if (!userData?.id) throw new Error('User ID is required');
       
-      return await userService.createOrgUser({
-        ...data,
+      // Make sure all required fields are provided
+      const submitData = {
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        address: data.address,
+        password: data.password || '',
+        department: data.department,
+        is_admin: data.is_admin,
         org_id: orgId,
         created_by: userData.id
-      });
+      };
+      
+      return await userService.createOrgUser(submitData);
     },
     onSuccess: () => {
       toast.success('User added successfully');
@@ -300,9 +309,9 @@ const OrgAdminUsers = () => {
                     <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                       <div className="space-y-0.5">
                         <FormLabel>Admin Privileges</FormLabel>
-                        <FormDescription className="text-xs">
+                        <p className="text-xs text-muted-foreground">
                           Admins can manage users and settings
-                        </FormDescription>
+                        </p>
                       </div>
                       <FormControl>
                         <Switch

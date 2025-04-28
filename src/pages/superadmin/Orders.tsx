@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { DataState, TableRowSkeleton } from '@/components/ui/data-state';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Eye, FileText, Package, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -43,7 +43,7 @@ const Orders = () => {
     queryKey: ['orders'],
     queryFn: async () => {
       try {
-        const response = await orderService.getAllOrders();
+        const response = await orderService.getOrders('');
         console.log('Fetched orders:', response.data);
         return response.data.orders || [];
       } catch (err) {
@@ -64,7 +64,7 @@ const Orders = () => {
     queryFn: async () => {
       if (!selectedOrder?.id) return null;
       try {
-        const response = await orderService.getOrderDetails(selectedOrder.id);
+        const response = await orderService.getOrderById(selectedOrder.id);
         return response.data.order || null;
       } catch (err) {
         console.error('Failed to fetch order details:', err);
@@ -77,7 +77,7 @@ const Orders = () => {
   // Update order status mutation
   const updateOrderStatusMutation = useMutation({
     mutationFn: async ({ orderId, status }: { orderId: string, status: string }) => {
-      return await orderService.updateOrderStatus(orderId, status);
+      return await orderService.updateOrderStatus(orderId, { status });
     },
     onSuccess: () => {
       toast.success('Order status updated successfully');

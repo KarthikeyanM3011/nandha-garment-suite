@@ -1,8 +1,8 @@
+
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { organizationService } from '@/services/api-extensions';
-import { userService } from '@/services/api';
+import { organizationService, userService } from '@/services/api-extensions';
 import { toast } from 'sonner';
 import { DataState } from '@/components/ui/data-state';
 import { Button } from '@/components/ui/button';
@@ -129,7 +129,13 @@ const OrganizationDetails = () => {
       if (!orgId) throw new Error('Organization ID is required');
       
       return await userService.createOrgUser({
-        ...data,
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        address: data.address,
+        department: data.department,
+        password: data.password,
+        is_admin: data.is_admin,
         org_id: orgId,
         created_by: userData?.id || 'super-admin',
       });
@@ -502,20 +508,20 @@ const OrganizationDetails = () => {
                   </FormItem>
                 )}
               />
-              <FormField
-                control={editOrgForm.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter email address" type="email" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
               <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={editOrgForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter email" type="email" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <FormField
                   control={editOrgForm.control}
                   name="phone"
@@ -524,19 +530,6 @@ const OrganizationDetails = () => {
                       <FormLabel>Phone</FormLabel>
                       <FormControl>
                         <Input placeholder="Enter phone number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={editOrgForm.control}
-                  name="gstin"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>GSTIN</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Enter GSTIN" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -556,9 +549,22 @@ const OrganizationDetails = () => {
                   </FormItem>
                 )}
               />
+              <FormField
+                control={editOrgForm.control}
+                name="gstin"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>GSTIN</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter GSTIN" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <DialogFooter>
                 <Button type="submit" disabled={updateOrgMutation.isPending}>
-                  {updateOrgMutation.isPending ? 'Updating...' : 'Update Organization'}
+                  {updateOrgMutation.isPending ? 'Saving...' : 'Save Changes'}
                 </Button>
               </DialogFooter>
             </form>

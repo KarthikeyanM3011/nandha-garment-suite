@@ -3,10 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
-import { userService } from '@/services/api';
-import { productService } from '@/services/api';
-import { orderService } from '@/services/api';
-import { measurementService } from '@/services/api';
+import { userService, productService, orderService, measurementService } from '@/services/api-extensions';
 import { DataState } from '@/components/ui/data-state';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -44,6 +41,7 @@ const NewOrder: React.FC<NewOrderProps> = ({ isOrgAdmin }) => {
   const [activeTab, setActiveTab] = useState("user");
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
+  const [productPrice, setProductPrice] = useState<number>(0);
 
   // Initialize form
   const form = useForm<OrderFormValues>({
@@ -117,7 +115,7 @@ const NewOrder: React.FC<NewOrderProps> = ({ isOrgAdmin }) => {
         // Get user type based on isOrgAdmin
         const userType = isOrgAdmin ? 'ORG_USER' : 'INDIVIDUAL';
         
-        const response = await measurementService.getMeasurements(selectedUser, userType);
+        const response = await measurementService.getMeasurementsByUser(selectedUser, userType);
         return response.data.measurements || [];
       } catch (error) {
         console.error('Failed to fetch measurements:', error);
@@ -130,7 +128,22 @@ const NewOrder: React.FC<NewOrderProps> = ({ isOrgAdmin }) => {
   // Create order mutation
   const createOrderMutation = useMutation({
     mutationFn: async (data: OrderFormValues) => {
-      return await orderService.createOrder(data);
+      // Calculate the total amount based on product price and quantity
+      const selectedProductData = products?.find((p: any) => p.id === data.product_id);
+      const total = selectedProductData ? selectedProductData.price * data.quantity : 0;
+      
+      const orderData = {
+        user_id: data.user_id,
+        user_type: isOrgAdmin ? 'ORG_USER' : 'INDIVIDUAL',
+        product_id: data.product_id,
+        measurement_id: data.measurement_id || undefined,
+        quantity: data.quantity,
+        notes: data.notes,
+        total_amount: total,
+        org_user_id: isOrgAdmin ? data.user_id : undefined
+      };
+      
+      return await orderService.createOrder(orderData);
     },
     onSuccess: () => {
       toast.success('Order created successfully');
@@ -145,9 +158,6 @@ const NewOrder: React.FC<NewOrderProps> = ({ isOrgAdmin }) => {
 
   // Handle form submission
   const onSubmit = (data: OrderFormValues) => {
-    if (data.measurement_id === "") {
-      delete data.measurement_id;
-    }
     createOrderMutation.mutate(data);
   };
 
@@ -162,8 +172,10 @@ const NewOrder: React.FC<NewOrderProps> = ({ isOrgAdmin }) => {
   useEffect(() => {
     if (selectedProduct) {
       form.setValue('product_id', selectedProduct);
+      const product = products?.find((p: any) => p.id === selectedProduct);
+      setProductPrice(product?.price || 0);
     }
-  }, [selectedProduct, form]);
+  }, [selectedProduct, form, products]);
 
   // Handle back button
   const handleBack = () => {
@@ -282,9 +294,7 @@ const NewOrder: React.FC<NewOrderProps> = ({ isOrgAdmin }) => {
                             <div className="p-4 border rounded-md bg-gray-50">
                               <div className="font-medium">{userData?.name}</div>
                               <div className="text-sm text-muted-foreground">{userData?.email}</div>
-                              {userData && <div className="hidden">
-                                {setSelectedUser(userData.id)}
-                              </div>}
+                              {userData && userData.id && setSelectedUser(userData.id)}
                             </div>
                           )}
                         </div>
@@ -472,7 +482,7 @@ const NewOrder: React.FC<NewOrderProps> = ({ isOrgAdmin }) => {
                           <div>{products?.find((product: any) => product.id === selectedProduct)?.name || 'Unknown'}</div>
                           
                           <div className="text-muted-foreground">Price:</div>
-                          <div>₹{products?.find((product: any) => product.id === selectedProduct)?.price || 0}</div>
+                          <div>₹{productPrice}</div>
 
                           <div className="text-muted-foreground">Quantity:</div>
                           <div>{form.watch("quantity")}</div>
@@ -486,7 +496,7 @@ const NewOrder: React.FC<NewOrderProps> = ({ isOrgAdmin }) => {
 
                           <div className="text-muted-foreground">Total:</div>
                           <div className="font-semibold">
-                            ₹{(form.watch("quantity") || 1) * (products?.find((product: any) => product.id === selectedProduct)?.price || 0)}
+                            ₹{(form.watch("quantity") || 1) * productPrice}
                           </div>
                         </div>
                       </div>
