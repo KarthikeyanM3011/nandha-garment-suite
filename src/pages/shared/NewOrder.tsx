@@ -13,6 +13,7 @@ import ProductSelectionTab from '@/features/orders/components/ProductSelectionTa
 import MeasurementSelectionTab from '@/features/orders/components/MeasurementSelectionTab';
 import OrderReviewTab from '@/features/orders/components/OrderReviewTab';
 import { NewOrderProps } from '@/features/orders/types';
+import { toast } from 'sonner';
 
 const NewOrder: React.FC<NewOrderProps> = ({ isOrgAdmin }) => {
   const navigate = useNavigate();
@@ -71,6 +72,10 @@ const NewOrder: React.FC<NewOrderProps> = ({ isOrgAdmin }) => {
     if (prevTab) setActiveTab(prevTab);
   };
 
+  const handleSubmit = (data: any) => {
+    createOrderMutation.mutate(data);
+  };
+
   return (
     <div className="space-y-8 animate-fade-in">
       <div className="flex items-center gap-3">
@@ -106,7 +111,7 @@ const NewOrder: React.FC<NewOrderProps> = ({ isOrgAdmin }) => {
               </TabsList>
 
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(createOrderMutation.mutate)} className="space-y-6">
+                <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
                   <UserSelectionTab
                     isOrgAdmin={isOrgAdmin}
                     users={users}

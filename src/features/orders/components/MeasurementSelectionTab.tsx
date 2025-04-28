@@ -48,7 +48,7 @@ const MeasurementSelectionTab: React.FC<MeasurementSelectionTabProps> = ({
                     <SelectValue placeholder="Select a measurement" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None (Skip)</SelectItem>
+                    <SelectItem value="none">None (Skip)</SelectItem>
                     {measurements?.map((measurement: any) => (
                       <SelectItem key={measurement.id} value={measurement.id}>
                         {measurement.type_name || 'Measurement'} - {new Date(measurement.created_at).toLocaleDateString()}

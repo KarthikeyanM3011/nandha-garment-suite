@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { DataState } from '@/components/ui/data-state';
@@ -28,6 +28,13 @@ const UserSelectionTab: React.FC<UserSelectionTabProps> = ({
   userData,
   onNext,
 }) => {
+  useEffect(() => {
+    // Set the user ID for individual users (non-admin) when the component mounts
+    if (!isOrgAdmin && userData && userData.id) {
+      setSelectedUser(userData.id);
+    }
+  }, [userData, isOrgAdmin, setSelectedUser]);
+
   return (
     <TabsContent value="user">
       <div className="space-y-4">
@@ -75,7 +82,6 @@ const UserSelectionTab: React.FC<UserSelectionTabProps> = ({
               <div className="p-4 border rounded-md bg-gray-50">
                 <div className="font-medium">{userData?.name}</div>
                 <div className="text-sm text-muted-foreground">{userData?.email}</div>
-                {userData && userData.id && setSelectedUser(userData.id)}
               </div>
             )}
           </div>
