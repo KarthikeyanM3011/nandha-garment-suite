@@ -19,15 +19,25 @@ import UnauthorizedPage from "./pages/unauthorized/UnauthorizedPage";
 // Super Admin Pages
 import SuperAdminDashboard from "./pages/superadmin/Dashboard";
 import Organizations from "./pages/superadmin/Organizations";
+import OrganizationDetails from "./pages/superadmin/OrganizationDetails";
 import Orders from "./pages/superadmin/Orders";
 import Products from "./pages/superadmin/Products";
-
+import IndividualUsers from "./pages/superadmin/IndividualUsers";
 
 // Organization Admin Pages
 import OrgAdminDashboard from "./pages/orgadmin/Dashboard";
+import OrgAdminUsers from "./pages/orgadmin/Users";
+import OrgAdminMeasurements from "./pages/orgadmin/Measurements";
+import OrgAdminProducts from "./pages/orgadmin/Products";
+import OrgAdminOrders from "./pages/orgadmin/Orders";
+import OrgAdminNewOrder from "./pages/orgadmin/NewOrder";
 
 // Individual User Pages
 import IndividualDashboard from "./pages/individual/Dashboard";
+import IndividualMeasurements from "./pages/individual/Measurements";
+import IndividualProducts from "./pages/individual/Products";
+import IndividualOrders from "./pages/individual/Orders";
+import IndividualNewOrder from "./pages/individual/NewOrder";
 
 // Shared and Other Pages
 import NotFound from "./pages/NotFound";
@@ -74,13 +84,14 @@ const App = () => {
             }>
               <Route path="dashboard" element={<SuperAdminDashboard />} />
               <Route path="organizations" element={<Organizations />} />
-              <Route path="organizations/:orgId" element={<div>Organization Details</div>} />
-              <Route path="organizations/new" element={<div>Create Organization</div>} />
+              <Route path="organizations/:orgId" element={<OrganizationDetails />} />
+              <Route path="organizations/new" element={<Organizations />} />
               <Route path="products" element={<Products />} />
-              <Route path="products/:productId" element={<div>Product Details</div>} />
-              <Route path="products/new" element={<div>Create Product</div>} />
+              <Route path="products/:productId" element={<Products />} />
+              <Route path="products/new" element={<Products />} />
               <Route path="orders" element={<Orders />} />
-              <Route path="orders/:orderId" element={<div>Order Details</div>} />
+              <Route path="orders/:orderId" element={<Orders />} />
+              <Route path="individual-users" element={<IndividualUsers />} />
               <Route path="profile" element={<div>Profile Settings</div>} />
               <Route index element={<Navigate to="dashboard" replace />} />
             </Route>
@@ -92,17 +103,17 @@ const App = () => {
               </ProtectedRoute>
             }>
               <Route path="dashboard" element={<OrgAdminDashboard />} />
-              <Route path="users" element={<div>User Management</div>} />
-              <Route path="users/new" element={<div>Create User</div>} />
-              <Route path="users/:userId" element={<div>User Details</div>} />
-              <Route path="measurements" element={<div>Measurement Management</div>} />
-              <Route path="measurements/new" element={<div>New Measurement</div>} />
-              <Route path="measurements/:measurementId" element={<div>Measurement Details</div>} />
-              <Route path="products" element={<div>Product Catalog</div>} />
-              <Route path="products/:productId" element={<div>Product Details</div>} />
-              <Route path="orders" element={<div>Orders Management</div>} />
-              <Route path="orders/new" element={<div>Place Order</div>} />
-              <Route path="orders/:orderId" element={<div>Order Details</div>} />
+              <Route path="users" element={<OrgAdminUsers />} />
+              <Route path="users/new" element={<OrgAdminUsers />} />
+              <Route path="users/:userId" element={<OrgAdminUsers />} />
+              <Route path="measurements" element={<OrgAdminMeasurements />} />
+              <Route path="measurements/new" element={<OrgAdminMeasurements />} />
+              <Route path="measurements/:measurementId" element={<OrgAdminMeasurements />} />
+              <Route path="products" element={<OrgAdminProducts />} />
+              <Route path="products/:productId" element={<OrgAdminProducts />} />
+              <Route path="orders" element={<OrgAdminOrders />} />
+              <Route path="orders/new" element={<OrgAdminNewOrder />} />
+              <Route path="orders/:orderId" element={<OrgAdminOrders />} />
               <Route path="profile" element={<div>Profile Settings</div>} />
               <Route index element={<Navigate to="dashboard" replace />} />
             </Route>
@@ -114,14 +125,14 @@ const App = () => {
               </ProtectedRoute>
             }>
               <Route path="dashboard" element={<IndividualDashboard />} />
-              <Route path="measurements" element={<div>My Measurements</div>} />
-              <Route path="measurements/new" element={<div>New Measurement</div>} />
-              <Route path="measurements/:measurementId" element={<div>Measurement Details</div>} />
-              <Route path="products" element={<div>Product Catalog</div>} />
-              <Route path="products/:productId" element={<div>Product Details</div>} />
-              <Route path="orders" element={<div>My Orders</div>} />
-              <Route path="orders/new" element={<div>Place Order</div>} />
-              <Route path="orders/:orderId" element={<div>Order Details</div>} />
+              <Route path="measurements" element={<IndividualMeasurements />} />
+              <Route path="measurements/new" element={<IndividualMeasurements />} />
+              <Route path="measurements/:measurementId" element={<IndividualMeasurements />} />
+              <Route path="products" element={<IndividualProducts />} />
+              <Route path="products/:productId" element={<IndividualProducts />} />
+              <Route path="orders" element={<IndividualOrders />} />
+              <Route path="orders/new" element={<IndividualNewOrder />} />
+              <Route path="orders/:orderId" element={<IndividualOrders />} />
               <Route path="profile" element={<div>Profile Settings</div>} />
               <Route index element={<Navigate to="dashboard" replace />} />
             </Route>

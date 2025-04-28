@@ -2,167 +2,144 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { userService } from '@/services/api';
-import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { DataState } from '@/components/ui/data-state';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Pencil, Trash2, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, X } from 'lucide-react';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
-import { Switch } from '@/components/ui/switch';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 
 // Define types
-interface OrgUser {
+interface IndividualUser {
   id: string;
-  org_id: string;
   name: string;
   email: string;
   phone: string;
   address: string;
-  department: string;
-  is_admin: boolean;
   created_at: string;
   updated_at: string;
 }
 
 // Define form schema
-const userFormSchema = z.object({
+const individualFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters" }),
   email: z.string().email({ message: "Please enter a valid email address" }),
   phone: z.string().min(10, { message: "Phone number must be at least 10 characters" }),
   address: z.string().min(5, { message: "Address must be at least 5 characters" }),
-  department: z.string().min(2, { message: "Department must be at least 2 characters" }),
   password: z.string().min(6, { message: "Password must be at least 6 characters" }),
-  is_admin: z.boolean().default(false),
 });
 
-const Users = () => {
-  const { userData } = useAuth();
+const IndividualUsers = () => {
   const queryClient = useQueryClient();
-  const [searchTerm, setSearchTerm] = useState('');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<OrgUser | null>(null);
+  const [selectedUser, setSelectedUser] = useState<IndividualUser | null>(null);
 
-  // Fetch organization users
-  const { data: users, isLoading, error } = useQuery({
-    queryKey: ['orgUsers', userData?.org_id],
+  // Fetch individual users
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['individualUsers'],
     queryFn: async () => {
-      if (!userData?.org_id) throw new Error('Organization ID is required');
-      
       try {
-        const response = await userService.getOrgUsers(userData.org_id);
-        console.log('Organization users fetched:', response.data);
-        return response.data.users || [];
+        console.log('Fetching individual users...');   
+        const response = await userService.getIndividuals();
+        console.log('Individual users fetched:', response.data);
+        return response.data.individuals || [];
       } catch (err) {
-        console.error('Failed to fetch organization users:', err);
-        throw new Error('Failed to fetch organization users');
+        console.error('Failed to fetch individual users:', err);
+        throw new Error('Failed to fetch individual users');
       }
-    },
-    enabled: !!userData?.org_id,
+    }
   });
 
-  // Create user mutation
+  // Create individual user mutation
   const createUserMutation = useMutation({
-    mutationFn: async (data: z.infer<typeof userFormSchema>) => {
-      if (!userData?.org_id) throw new Error('Organization ID is required');
-      
-      return await userService.createOrgUser({
-        ...data,
-        org_id: userData.org_id,
-      });
+    mutationFn: async (data: z.infer<typeof individualFormSchema>) => {
+      return await userService.createIndividual(data);
     },
     onSuccess: () => {
-      toast.success('User created successfully');
-      queryClient.invalidateQueries({ queryKey: ['orgUsers', userData?.org_id] });
+      toast.success('Individual user created successfully');
+      queryClient.invalidateQueries({ queryKey: ['individualUsers'] });
       setIsCreateDialogOpen(false);
       createForm.reset();
     },
     onError: (error: any) => {
-      toast.error(`Failed to create user: ${error.message}`);
+      toast.error(`Failed to create individual user: ${error.message}`);
     }
   });
 
-  // Update user mutation
+  // Update individual user mutation
   const updateUserMutation = useMutation({
-    mutationFn: async ({ userId, data }: { userId: string, data: Partial<z.infer<typeof userFormSchema>> }) => {
-      return await userService.updateOrgUser(userId, data);
+    mutationFn: async ({ userId, data }: { userId: string, data: Partial<z.infer<typeof individualFormSchema>> }) => {
+      return await userService.updateIndividual(userId, data);
     },
     onSuccess: () => {
-      toast.success('User updated successfully');
-      queryClient.invalidateQueries({ queryKey: ['orgUsers', userData?.org_id] });
+      toast.success('Individual user updated successfully');
+      queryClient.invalidateQueries({ queryKey: ['individualUsers'] });
       setIsEditDialogOpen(false);
       setSelectedUser(null);
     },
     onError: (error: any) => {
-      toast.error(`Failed to update user: ${error.message}`);
+      toast.error(`Failed to update individual user: ${error.message}`);
     }
   });
 
-  // Delete user mutation
+  // Delete individual user mutation
   const deleteUserMutation = useMutation({
     mutationFn: async (userId: string) => {
-      return await userService.deleteOrgUser(userId);
+      return await userService.deleteIndividual(userId);
     },
     onSuccess: () => {
-      toast.success('User deleted successfully');
-      queryClient.invalidateQueries({ queryKey: ['orgUsers', userData?.org_id] });
+      toast.success('Individual user deleted successfully');
+      queryClient.invalidateQueries({ queryKey: ['individualUsers'] });
     },
     onError: (error: any) => {
-      toast.error(`Failed to delete user: ${error.message}`);
+      toast.error(`Failed to delete individual user: ${error.message}`);
     }
   });
 
   // Create form setup
-  const createForm = useForm<z.infer<typeof userFormSchema>>({
-    resolver: zodResolver(userFormSchema),
+  const createForm = useForm<z.infer<typeof individualFormSchema>>({
+    resolver: zodResolver(individualFormSchema),
     defaultValues: {
       name: '',
       email: '',
       phone: '',
       address: '',
-      department: '',
       password: '',
-      is_admin: false,
     },
   });
 
   // Edit form setup
-  const editForm = useForm<Partial<z.infer<typeof userFormSchema>>>({
-    resolver: zodResolver(userFormSchema.partial()),
+  const editForm = useForm<Partial<z.infer<typeof individualFormSchema>>>({
+    resolver: zodResolver(individualFormSchema.partial()),
     defaultValues: {
       name: '',
       email: '',
       phone: '',
       address: '',
-      department: '',
-      is_admin: false,
     },
   });
 
   // Handle create form submission
-  const onCreateSubmit = (data: z.infer<typeof userFormSchema>) => {
+  const onCreateSubmit = (data: z.infer<typeof individualFormSchema>) => {
     createUserMutation.mutate(data);
   };
 
   // Handle edit form submission
-  const onEditSubmit = (data: Partial<z.infer<typeof userFormSchema>>) => {
+  const onEditSubmit = (data: Partial<z.infer<typeof individualFormSchema>>) => {
     if (!selectedUser) return;
     
-    const updateData: Partial<z.infer<typeof userFormSchema>> = {};
+    const updateData: Partial<z.infer<typeof individualFormSchema>> = {};
     if (data.name) updateData.name = data.name;
     if (data.email) updateData.email = data.email;
     if (data.phone) updateData.phone = data.phone;
     if (data.address) updateData.address = data.address;
-    if (data.department) updateData.department = data.department;
     if (data.password) updateData.password = data.password;
-    if (data.is_admin !== undefined) updateData.is_admin = data.is_admin;
     
     updateUserMutation.mutate({ 
       userId: selectedUser.id, 
@@ -171,15 +148,13 @@ const Users = () => {
   };
 
   // Handle edit user
-  const handleEditUser = (user: OrgUser) => {
+  const handleEditUser = (user: IndividualUser) => {
     setSelectedUser(user);
     editForm.reset({
       name: user.name,
       email: user.email,
       phone: user.phone,
       address: user.address,
-      department: user.department,
-      is_admin: user.is_admin,
     });
     setIsEditDialogOpen(true);
   };
@@ -191,33 +166,25 @@ const Users = () => {
     }
   };
 
-  // Filter users based on search term
-  const filteredUsers = users ? users.filter((user: OrgUser) => {
-    return searchTerm === '' || 
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.department.toLowerCase().includes(searchTerm.toLowerCase());
-  }) : [];
-
   return (
     <div className="space-y-8 animate-fade-in">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-gray-900">Users</h2>
-          <p className="text-muted-foreground">Manage users in your organization</p>
+          <h2 className="text-3xl font-bold tracking-tight text-gray-900">Individual Users</h2>
+          <p className="text-muted-foreground">Manage all individual users in the system</p>
         </div>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button className="gap-2">
               <Plus size={16} />
-              Add User
+              Add Individual User
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[550px]">
             <DialogHeader>
-              <DialogTitle>Create New User</DialogTitle>
+              <DialogTitle>Create New Individual User</DialogTitle>
               <DialogDescription>
-                Enter the details for the new user. Click save when you're done.
+                Enter the details for the new individual user. Click save when you're done.
               </DialogDescription>
             </DialogHeader>
             <Form {...createForm}>
@@ -275,19 +242,6 @@ const Users = () => {
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={createForm.control}
-                    name="department"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Department</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Enter department" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
                 </div>
                 <FormField
                   control={createForm.control}
@@ -302,28 +256,6 @@ const Users = () => {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={createForm.control}
-                  name="is_admin"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <FormLabel className="text-base">
-                          Admin Privileges
-                        </FormLabel>
-                        <FormDescription>
-                          Grant admin access to this user
-                        </FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
                 <DialogFooter>
                   <Button type="submit" disabled={createUserMutation.isPending}>
                     {createUserMutation.isPending ? 'Creating...' : 'Create User'}
@@ -335,81 +267,68 @@ const Users = () => {
         </Dialog>
       </div>
 
-      <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-        <Input
-          placeholder="Search users by name, email, or department"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-10"
-        />
-      </div>
-
       <DataState 
         isLoading={isLoading} 
         error={error} 
-        isEmpty={!filteredUsers || filteredUsers.length === 0}
-        emptyMessage={searchTerm ? "No users match your search" : "No users found. Click 'Add User' to create one."}
+        isEmpty={!data || data.length === 0}
+        emptyMessage="No individual users found. Click 'Add Individual User' to create one."
       >
-        <Card>
-          <CardHeader className="bg-gray-50 border-b">
-            <CardTitle className="text-lg">Users List</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredUsers.map((user: OrgUser) => (
-                  <TableRow key={user.id}>
-                    <TableCell className="font-medium">{user.name}</TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>{user.department}</TableCell>
-                    <TableCell>{user.phone}</TableCell>
-                    <TableCell>{user.is_admin ? 'Admin' : 'User'}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => handleEditUser(user)}
-                        >
-                          <Pencil size={16} />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
-                          onClick={() => handleDeleteUser(user.id)}
-                        >
-                          <Trash2 size={16} />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {data && data.map((user: IndividualUser) => (
+            <Card key={user.id} className="overflow-hidden transition-all hover:shadow-md">
+              <CardHeader className="bg-gray-50 border-b">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle className="text-xl font-bold">{user.name}</CardTitle>
+                    <CardDescription className="mt-1">{user.email}</CardDescription>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                    onClick={() => handleDeleteUser(user.id)}
+                  >
+                    <Trash2 size={18} />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Phone:</span>
+                    <span className="font-medium">{user.phone}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Address:</span>
+                    <p className="font-medium mt-1">{user.address}</p>
+                  </div>
+                </div>
+              </CardContent>
+              <CardFooter className="border-t bg-gray-50 py-3">
+                <div className="text-xs text-muted-foreground w-full flex justify-between">
+                  <span>Created: {new Date(user.created_at).toLocaleDateString()}</span>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="h-8"
+                    onClick={() => handleEditUser(user)}
+                  >
+                    <Pencil size={14} className="mr-1" /> Edit
+                  </Button>
+                </div>
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
       </DataState>
 
       {/* Edit User Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="sm:max-w-[550px]">
           <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
+            <DialogTitle>Edit Individual User</DialogTitle>
             <DialogDescription>
-              Update the details for this user. Fields left blank will remain unchanged.
+              Update the details for this individual user. Fields left blank will remain unchanged.
             </DialogDescription>
           </DialogHeader>
           <Form {...editForm}>
@@ -467,19 +386,6 @@ const Users = () => {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={editForm.control}
-                  name="department"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Department</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Enter department" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </div>
               <FormField
                 control={editForm.control}
@@ -491,28 +397,6 @@ const Users = () => {
                       <Input placeholder="Enter address" {...field} />
                     </FormControl>
                     <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={editForm.control}
-                name="is_admin"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
-                      <FormLabel className="text-base">
-                        Admin Privileges
-                      </FormLabel>
-                      <FormDescription>
-                        Grant admin access to this user
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value || false}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
                   </FormItem>
                 )}
               />
@@ -529,4 +413,4 @@ const Users = () => {
   );
 };
 
-export default Users;
+export default IndividualUsers;

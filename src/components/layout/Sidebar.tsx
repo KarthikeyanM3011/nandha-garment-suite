@@ -58,6 +58,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggleSidebar }) => {
           label="Organizations" 
         />
         <SidebarLink 
+          to="/super-admin/individual-users" 
+          icon={<User size={18} />} 
+          label="Individual Users" 
+        />
+        <SidebarLink 
           to="/super-admin/products" 
           icon={<ShoppingBag size={18} />} 
           label="Products" 

@@ -45,6 +45,7 @@ const Organizations = () => {
   const { userData } = useAuth();
   const queryClient = useQueryClient();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedOrganization, setSelectedOrganization] = useState<Organization | null>(null);
 
   // Fetch organizations
@@ -76,10 +77,26 @@ const Organizations = () => {
       toast.success('Organization created successfully');
       queryClient.invalidateQueries({ queryKey: ['organizations'] });
       setIsCreateDialogOpen(false);
-      form.reset();
+      createForm.reset();
     },
     onError: (error: any) => {
       toast.error(`Failed to create organization: ${error.message}`);
+    }
+  });
+
+  // Update organization mutation
+  const updateOrgMutation = useMutation({
+    mutationFn: async ({ orgId, data }: { orgId: string, data: any }) => {
+      return await organizationService.updateOrganization(orgId, data);
+    },
+    onSuccess: () => {
+      toast.success('Organization updated successfully');
+      queryClient.invalidateQueries({ queryKey: ['organizations'] });
+      setIsEditDialogOpen(false);
+      setSelectedOrganization(null);
+    },
+    onError: (error: any) => {
+      toast.error(`Failed to update organization: ${error.message}`);
     }
   });
 
@@ -97,8 +114,21 @@ const Organizations = () => {
     }
   });
 
-  // Form setup
-  const form = useForm<z.infer<typeof organizationFormSchema>>({
+  // Create form setup
+  const createForm = useForm<z.infer<typeof organizationFormSchema>>({
+    resolver: zodResolver(organizationFormSchema),
+    defaultValues: {
+      name: '',
+      pan: '',
+      email: '',
+      phone: '',
+      address: '',
+      gstin: '',
+    },
+  });
+  
+  // Edit form setup
+  const editForm = useForm<z.infer<typeof organizationFormSchema>>({
     resolver: zodResolver(organizationFormSchema),
     defaultValues: {
       name: '',
@@ -111,8 +141,31 @@ const Organizations = () => {
   });
 
   // Handle form submission
-  const onSubmit = (data: z.infer<typeof organizationFormSchema>) => {
+  const onCreateSubmit = (data: z.infer<typeof organizationFormSchema>) => {
     createOrgMutation.mutate(data);
+  };
+  
+  // Handle edit form submission
+  const onEditSubmit = (data: z.infer<typeof organizationFormSchema>) => {
+    if (!selectedOrganization) return;
+    updateOrgMutation.mutate({ 
+      orgId: selectedOrganization.id, 
+      data 
+    });
+  };
+  
+  // Handle edit organization
+  const handleEditOrganization = (org: Organization) => {
+    setSelectedOrganization(org);
+    editForm.reset({
+      name: org.name,
+      pan: org.pan,
+      email: org.email,
+      phone: org.phone,
+      address: org.address,
+      gstin: org.gstin,
+    });
+    setIsEditDialogOpen(true);
   };
 
   // Handle delete organization
@@ -143,10 +196,10 @@ const Organizations = () => {
                 Enter the details for the new organization. Click save when you're done.
               </DialogDescription>
             </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
+            <Form {...createForm}>
+              <form onSubmit={createForm.handleSubmit(onCreateSubmit)} className="space-y-4 pt-4">
                 <FormField
-                  control={form.control}
+                  control={createForm.control}
                   name="name"
                   render={({ field }) => (
                     <FormItem>
@@ -159,7 +212,7 @@ const Organizations = () => {
                   )}
                 />
                 <FormField
-                  control={form.control}
+                  control={createForm.control}
                   name="pan"
                   render={({ field }) => (
                     <FormItem>
@@ -172,7 +225,7 @@ const Organizations = () => {
                   )}
                 />
                 <FormField
-                  control={form.control}
+                  control={createForm.control}
                   name="email"
                   render={({ field }) => (
                     <FormItem>
@@ -186,7 +239,7 @@ const Organizations = () => {
                 />
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
-                    control={form.control}
+                    control={createForm.control}
                     name="phone"
                     render={({ field }) => (
                       <FormItem>
@@ -199,7 +252,7 @@ const Organizations = () => {
                     )}
                   />
                   <FormField
-                    control={form.control}
+                    control={createForm.control}
                     name="gstin"
                     render={({ field }) => (
                       <FormItem>
@@ -213,7 +266,7 @@ const Organizations = () => {
                   />
                 </div>
                 <FormField
-                  control={form.control}
+                  control={createForm.control}
                   name="address"
                   render={({ field }) => (
                     <FormItem>
@@ -284,7 +337,12 @@ const Organizations = () => {
               <CardFooter className="border-t bg-gray-50 py-3">
                 <div className="text-xs text-muted-foreground w-full flex justify-between">
                   <span>Created: {new Date(org.created_at).toLocaleDateString()}</span>
-                  <Button variant="outline" size="sm" className="h-8">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="h-8"
+                    onClick={() => handleEditOrganization(org)}
+                  >
                     <Pencil size={14} className="mr-1" /> Edit
                   </Button>
                 </div>
@@ -293,6 +351,107 @@ const Organizations = () => {
           ))}
         </div>
       </DataState>
+      
+      {/* Edit Organization Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[550px]">
+          <DialogHeader>
+            <DialogTitle>Edit Organization</DialogTitle>
+            <DialogDescription>
+              Update the details for this organization. Click save when you're done.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...editForm}>
+            <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4 pt-4">
+              <FormField
+                control={editForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Organization Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter organization name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
+                name="pan"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>PAN</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter PAN" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter email address" type="email" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter phone number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
+                  name="gstin"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>GSTIN</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter GSTIN" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={editForm.control}
+                name="address"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Address</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter address" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="submit" disabled={updateOrgMutation.isPending}>
+                  {updateOrgMutation.isPending ? 'Updating...' : 'Update Organization'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
