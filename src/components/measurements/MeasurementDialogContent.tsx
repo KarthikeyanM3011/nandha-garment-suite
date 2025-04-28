@@ -7,7 +7,7 @@ import MeasurementSectionFields from './MeasurementSectionFields';
 
 interface MeasurementDialogContentProps {
   isLoading: boolean;
-  hasError: boolean;
+  hasError: unknown;  // Changed from boolean to unknown to match the error
   activeTab: string;
   setActiveTab: (tab: string) => void;
   measurementTypes: any[];
