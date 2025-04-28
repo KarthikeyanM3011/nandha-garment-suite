@@ -8,9 +8,9 @@ import { DataState } from '@/components/ui/data-state';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus, Edit, Trash2, Ruler } from 'lucide-react';
 import { format } from 'date-fns';
+import MeasurementDialog from '@/components/measurements/MeasurementDialog';
 
 interface Measurement {
   id: string;
@@ -31,7 +31,7 @@ const IndividualMeasurements = () => {
   const { userData } = useAuth();
   const queryClient = useQueryClient();
   const [selectedMeasurement, setSelectedMeasurement] = useState<Measurement | null>(null);
-  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   
   const userId = userData?.id;
   const userType = 'INDIVIDUAL';
@@ -78,10 +78,22 @@ const IndividualMeasurements = () => {
     }
   };
 
-  // Handle view measurement
-  const handleViewMeasurement = (measurement: Measurement) => {
+  // Handle add new measurement
+  const handleAddMeasurement = () => {
+    setSelectedMeasurement(null);
+    setIsDialogOpen(true);
+  };
+
+  // Handle edit measurement
+  const handleEditMeasurement = (measurement: Measurement) => {
     setSelectedMeasurement(measurement);
-    setIsViewDialogOpen(true);
+    setIsDialogOpen(true);
+  };
+
+  // Handle dialog close
+  const handleDialogClose = () => {
+    setIsDialogOpen(false);
+    setSelectedMeasurement(null);
   };
 
   return (
@@ -91,7 +103,7 @@ const IndividualMeasurements = () => {
           <h2 className="text-3xl font-bold tracking-tight text-gray-900">My Measurements</h2>
           <p className="text-muted-foreground">View and manage your measurements</p>
         </div>
-        <Button className="gap-2" onClick={() => toast.info('Add new measurement functionality coming soon!')}>
+        <Button className="gap-2" onClick={handleAddMeasurement}>
           <Plus size={16} />
           Add Measurement
         </Button>
@@ -133,7 +145,7 @@ const IndividualMeasurements = () => {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleViewMeasurement(measurement)}
+                          onClick={() => handleEditMeasurement(measurement)}
                         >
                           <Edit size={16} />
                         </Button>
@@ -155,44 +167,15 @@ const IndividualMeasurements = () => {
         </Card>
       </DataState>
 
-      {/* View Measurement Dialog */}
-      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="sm:max-w-[550px]">
-          <DialogHeader>
-            <DialogTitle>Measurement Details</DialogTitle>
-            <DialogDescription>
-              View the details of this measurement record.
-            </DialogDescription>
-          </DialogHeader>
-          {selectedMeasurement && (
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-lg font-medium">{selectedMeasurement.type_name}</h3>
-                <p className="text-sm text-muted-foreground">
-                  Recorded on {format(new Date(selectedMeasurement.created_at), 'MMMM dd, yyyy')}
-                </p>
-              </div>
-
-              <div className="border rounded-md p-4">
-                <h4 className="font-medium mb-3">Measurement Values</h4>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                  {selectedMeasurement.values && selectedMeasurement.values.map((value) => (
-                    <div key={value.field_id} className="flex justify-between border-b pb-1">
-                      <span className="text-sm">{value.field_name || 'Field'}</span>
-                      <span className="font-medium">{value.value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {isDialogOpen && userId && (
+        <MeasurementDialog
+          isOpen={isDialogOpen}
+          onClose={handleDialogClose}
+          userId={userId}
+          userType={userType}
+          measurementId={selectedMeasurement?.id}
+        />
+      )}
     </div>
   );
 };

@@ -1,54 +1,55 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import { orderService } from '@/services/api-extensions';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { DataState } from '@/components/ui/data-state';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Eye, FileText, Package, Search, Plus } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { ClipboardList, Plus, Eye, Pencil, Trash2, Filter, ChevronDown, ChevronUp } from 'lucide-react';
-import { format } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
+
+// Define types
+interface Order {
+  id: string;
+  user_id: string;
+  user_type: string;
+  org_user_id: string;
+  status: string;
+  total_amount: number;
+  created_at: string;
+  updated_at: string;
+  user_name?: string;
+  org_name?: string;
+}
 
 interface OrdersProps {
   isOrgAdmin: boolean;
 }
 
-interface Order {
-  id: string;
-  user_id: string;
-  org_id: string;
-  product_id: string;
-  measurement_id?: string;
-  status: string;
-  quantity: number;
-  notes?: string;
-  created_at: string;
-  updated_at: string;
-  product_name: string;
-  product_price: number;
-  user_name: string;
-  user_email: string;
-  user_phone: string;
-}
-
 const Orders: React.FC<OrdersProps> = ({ isOrgAdmin }) => {
-  const { userData } = useAuth();
   const navigate = useNavigate();
+  const { userData } = useAuth();
   const queryClient = useQueryClient();
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false);
-  const [sortField, setSortField] = useState<string>('created_at');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
+
+  // Create query parameters based on user type
+  const getQueryString = () => {
+    if (isOrgAdmin) {
+      return `org_id=${userData?.org_id}`;
+    } else {
+      return `user_id=${userData?.id}&user_type=INDIVIDUAL`;
+    }
+  };
 
   // Fetch orders
   const { 
@@ -56,25 +57,10 @@ const Orders: React.FC<OrdersProps> = ({ isOrgAdmin }) => {
     isLoading, 
     error 
   } = useQuery({
-    queryKey: ['orders', isOrgAdmin, userData?.id, userData?.org_id, statusFilter],
+    queryKey: ['orders', isOrgAdmin, userData?.id, userData?.org_id],
     queryFn: async () => {
       try {
-        // Build query string based on filters
-        let queryString = '';
-        
-        if (isOrgAdmin && userData?.org_id) {
-          queryString += `org_id=${userData.org_id}&`;
-        } else if (!isOrgAdmin && userData?.id) {
-          queryString += `user_id=${userData.id}&`;
-        }
-        
-        if (statusFilter) {
-          queryString += `status=${statusFilter}`;
-        }
-        
-        // Remove trailing & if present
-        queryString = queryString.endsWith('&') ? queryString.slice(0, -1) : queryString;
-        
+        const queryString = getQueryString();
         const response = await orderService.getOrders(queryString);
         return response.data.orders || [];
       } catch (err) {
@@ -82,110 +68,98 @@ const Orders: React.FC<OrdersProps> = ({ isOrgAdmin }) => {
         throw new Error('Failed to fetch orders');
       }
     },
-    enabled: isOrgAdmin ? !!userData?.org_id : !!userData?.id,
+    enabled: isOrgAdmin ? !!userData?.org_id : !!userData?.id
+  });
+
+  // Fetch order details
+  const { 
+    data: orderDetails, 
+    isLoading: isDetailsLoading,
+    error: detailsError,
+    refetch: refetchOrderDetails
+  } = useQuery({
+    queryKey: ['orderDetails', selectedOrder?.id],
+    queryFn: async () => {
+      if (!selectedOrder?.id) return null;
+      try {
+        const response = await orderService.getOrderById(selectedOrder.id);
+        return response.data.order || null;
+      } catch (err) {
+        console.error('Failed to fetch order details:', err);
+        throw new Error('Failed to fetch order details');
+      }
+    },
+    enabled: !!selectedOrder?.id,
   });
 
   // Update order status mutation
-  const updateStatusMutation = useMutation({
-    mutationFn: async (data: { orderId: string; status: string }) => {
-      return await orderService.updateOrderStatus(data.orderId, { status: data.status });
+  const updateOrderStatusMutation = useMutation({
+    mutationFn: async ({ orderId, status }: { orderId: string, status: string }) => {
+      return await orderService.updateOrderStatus(orderId, { status });
     },
     onSuccess: () => {
       toast.success('Order status updated successfully');
       queryClient.invalidateQueries({ queryKey: ['orders'] });
-      setIsStatusDialogOpen(false);
-      setSelectedOrder(null);
+      if (selectedOrder) {
+        refetchOrderDetails();
+      }
     },
     onError: (error: any) => {
       toast.error(`Failed to update order status: ${error.message}`);
     }
   });
 
-  // Delete order mutation
-  const deleteOrderMutation = useMutation({
-    mutationFn: async (orderId: string) => {
-      return await orderService.deleteOrder(orderId);
-    },
-    onSuccess: () => {
-      toast.success('Order deleted successfully');
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
-      setIsDeleteDialogOpen(false);
-      setSelectedOrder(null);
-    },
-    onError: (error: any) => {
-      toast.error(`Failed to delete order: ${error.message}`);
-    }
-  });
+  // Filter orders based on search term and status
+  const filteredOrders = orders ? orders.filter((order: Order) => {
+    const matchesSearch = searchTerm === '' || 
+      (order.id && order.id.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (order.user_name && order.user_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (order.org_name && order.org_name.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
+  }) : [];
 
-  // Handle adding a new order
-  const handleAddOrder = () => {
+  // Handle order details view
+  const handleViewOrderDetails = (order: Order) => {
+    setSelectedOrder(order);
+    setIsDetailsDialogOpen(true);
+  };
+
+  // Handle update status
+  const handleUpdateStatus = (orderId: string, status: string) => {
+    updateOrderStatusMutation.mutate({ orderId, status });
+  };
+
+  // Navigate to create new order
+  const handleCreateNewOrder = () => {
     navigate(isOrgAdmin ? '/org-admin/orders/new' : '/individual/orders/new');
   };
 
-  // Handle viewing an order
-  const handleViewOrder = (order: Order) => {
-    setSelectedOrder(order);
-    setIsViewDialogOpen(true);
+  // Format price
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+    }).format(price);
   };
 
-  // Handle updating order status
-  const handleStatusUpdate = (status: string) => {
-    if (!selectedOrder) return;
-    
-    updateStatusMutation.mutate({
-      orderId: selectedOrder.id,
-      status
-    });
-  };
-
-  // Handle delete confirmation
-  const handleDeleteConfirm = () => {
-    if (!selectedOrder) return;
-    deleteOrderMutation.mutate(selectedOrder.id);
-  };
-
-  // Handle sorting
-  const handleSort = (field: string) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
-  };
-
-  // Sort orders
-  const sortedOrders = orders ? [...orders].sort((a: any, b: any) => {
-    if (sortField === 'created_at') {
-      const dateA = new Date(a.created_at).getTime();
-      const dateB = new Date(b.created_at).getTime();
-      return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
-    } else if (sortField === 'product_price') {
-      const priceA = a.product_price * a.quantity;
-      const priceB = b.product_price * b.quantity;
-      return sortDirection === 'asc' ? priceA - priceB : priceB - priceA;
-    } else {
-      if (a[sortField] < b[sortField]) return sortDirection === 'asc' ? -1 : 1;
-      if (a[sortField] > b[sortField]) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    }
-  }) : [];
-
-  // Get status badge color
-  const getStatusColor = (status: string) => {
+  // Get status badge
+  const getStatusBadge = (status: string) => {
     switch (status.toLowerCase()) {
       case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'accepted':
-        return 'bg-blue-100 text-blue-800';
+        return <Badge variant="outline" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>;
       case 'processing':
-        return 'bg-purple-100 text-purple-800';
+        return <Badge variant="outline" className="bg-blue-100 text-blue-800 hover:bg-blue-100">Processing</Badge>;
+      case 'shipped':
+        return <Badge variant="outline" className="bg-purple-100 text-purple-800 hover:bg-purple-100">Shipped</Badge>;
       case 'delivered':
-        return 'bg-green-100 text-green-800';
+        return <Badge variant="outline" className="bg-green-100 text-green-800 hover:bg-green-100">Delivered</Badge>;
       case 'cancelled':
-        return 'bg-red-100 text-red-800';
+        return <Badge variant="outline" className="bg-red-100 text-red-800 hover:bg-red-100">Cancelled</Badge>;
       default:
-        return 'bg-gray-100 text-gray-800';
+        return <Badge variant="outline">{status}</Badge>;
     }
   };
 
@@ -195,280 +169,185 @@ const Orders: React.FC<OrdersProps> = ({ isOrgAdmin }) => {
         <div>
           <h2 className="text-3xl font-bold tracking-tight text-gray-900">Orders</h2>
           <p className="text-muted-foreground">
-            {isOrgAdmin ? "Manage all orders for your organization" : "View and track your orders"}
+            {isOrgAdmin ? "Manage organization orders" : "View your orders"}
           </p>
         </div>
-        <Button onClick={handleAddOrder} className="gap-2">
+        <Button onClick={handleCreateNewOrder} className="gap-2">
           <Plus size={16} />
           New Order
         </Button>
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-4">
-        <Select value={statusFilter || ''} onValueChange={(value) => setStatusFilter(value || null)}>
-          <SelectTrigger className="w-[180px]">
-            <div className="flex items-center gap-2">
-              <Filter size={16} />
-              {statusFilter ? `Status: ${statusFilter}` : 'Filter by Status'}
-            </div>
+      <div className="flex flex-col sm:flex-row gap-4 mb-6">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+          <Input
+            placeholder="Search by order ID or customer name"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Select
+          value={statusFilter}
+          onValueChange={setStatusFilter}
+        >
+          <SelectTrigger className="w-full sm:w-[180px]">
+            <SelectValue placeholder="Filter by status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Statuses</SelectItem>
+            <SelectItem value="all">All Statuses</SelectItem>
             <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="accepted">Accepted</SelectItem>
             <SelectItem value="processing">Processing</SelectItem>
+            <SelectItem value="shipped">Shipped</SelectItem>
             <SelectItem value="delivered">Delivered</SelectItem>
             <SelectItem value="cancelled">Cancelled</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
-      <DataState 
-        isLoading={isLoading} 
-        error={error} 
-        isEmpty={!orders || orders.length === 0}
-        emptyMessage="No orders found."
-      >
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ClipboardList size={18} />
-              Order List
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+      <Card>
+        <CardHeader className="bg-gray-50 border-b">
+          <CardTitle className="text-lg">Orders List</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <DataState 
+            isLoading={isLoading} 
+            error={error} 
+            isEmpty={!filteredOrders || filteredOrders.length === 0}
+            emptyMessage="No orders found. Create your first order to get started."
+          >
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead 
-                    className="cursor-pointer"
-                    onClick={() => handleSort('created_at')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Date
-                      {sortField === 'created_at' && (
-                        sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
-                      )}
-                    </div>
-                  </TableHead>
                   <TableHead>Order ID</TableHead>
+                  <TableHead>Date</TableHead>
                   {isOrgAdmin && <TableHead>Customer</TableHead>}
-                  <TableHead 
-                    className="cursor-pointer"
-                    onClick={() => handleSort('product_name')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Product
-                      {sortField === 'product_name' && (
-                        sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
-                      )}
-                    </div>
-                  </TableHead>
-                  <TableHead>Qty</TableHead>
-                  <TableHead 
-                    className="cursor-pointer"
-                    onClick={() => handleSort('product_price')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Amount
-                      {sortField === 'product_price' && (
-                        sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
-                      )}
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="cursor-pointer"
-                    onClick={() => handleSort('status')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Status
-                      {sortField === 'status' && (
-                        sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
-                      )}
-                    </div>
-                  </TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Amount</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedOrders.map((order: Order) => (
+                {filteredOrders.map((order: Order) => (
                   <TableRow key={order.id}>
-                    <TableCell className="font-medium">
-                      {format(new Date(order.created_at), 'MMM d, yyyy')}
-                    </TableCell>
-                    <TableCell className="font-mono text-sm">{order.id.substring(0, 8)}</TableCell>
-                    {isOrgAdmin && <TableCell>{order.user_name}</TableCell>}
-                    <TableCell>{order.product_name}</TableCell>
-                    <TableCell>{order.quantity}</TableCell>
-                    <TableCell>₹{(order.product_price * order.quantity).toFixed(2)}</TableCell>
-                    <TableCell>
-                      <Badge className={getStatusColor(order.status)}>
-                        {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                      </Badge>
-                    </TableCell>
+                    <TableCell className="font-medium">{order.id}</TableCell>
+                    <TableCell>{new Date(order.created_at).toLocaleDateString()}</TableCell>
+                    {isOrgAdmin && (
+                      <TableCell>{order.user_name || 'Unknown'}</TableCell>
+                    )}
+                    <TableCell>{getStatusBadge(order.status)}</TableCell>
+                    <TableCell>{formatPrice(order.total_amount)}</TableCell>
                     <TableCell className="text-right">
-                      <div className="flex justify-end space-x-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleViewOrder(order)}
-                        >
-                          <Eye size={16} />
-                        </Button>
-                        {isOrgAdmin && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              setSelectedOrder(order);
-                              setIsStatusDialogOpen(true);
-                            }}
-                          >
-                            <Pencil size={16} />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                          onClick={() => {
-                            setSelectedOrder(order);
-                            setIsDeleteDialogOpen(true);
-                          }}
-                        >
-                          <Trash2 size={16} />
-                        </Button>
-                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-8 px-2"
+                        onClick={() => handleViewOrderDetails(order)}
+                      >
+                        <Eye size={16} className="mr-1" /> View
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
-      </DataState>
+          </DataState>
+        </CardContent>
+      </Card>
 
-      {/* View Order Dialog */}
-      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="sm:max-w-[550px]">
+      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>Order Details</DialogTitle>
             <DialogDescription>
-              View detailed information about this order.
+              Complete information about this order.
             </DialogDescription>
           </DialogHeader>
-          {selectedOrder && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Order ID</p>
-                  <p className="font-mono">{selectedOrder.id}</p>
+          
+          <DataState
+            isLoading={isDetailsLoading}
+            error={detailsError}
+            isEmpty={!orderDetails}
+          >
+            {selectedOrder && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h4 className="text-sm font-medium text-muted-foreground mb-1">Order ID</h4>
+                    <p className="font-medium">{selectedOrder.id}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-medium text-muted-foreground mb-1">Date</h4>
+                    <p className="font-medium">
+                      {new Date(selectedOrder.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-medium text-muted-foreground mb-1">Customer</h4>
+                    <p className="font-medium">{selectedOrder.user_name || 'Unknown'}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-medium text-muted-foreground mb-1">Status</h4>
+                    <div className="flex items-center gap-2">
+                      {getStatusBadge(selectedOrder.status)}
+                      {isOrgAdmin && (
+                        <Select
+                          defaultValue={selectedOrder.status}
+                          onValueChange={(value) => handleUpdateStatus(selectedOrder.id, value)}
+                        >
+                          <SelectTrigger className="h-8 w-[130px] text-xs">
+                            <SelectValue placeholder="Update status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pending">Pending</SelectItem>
+                            <SelectItem value="processing">Processing</SelectItem>
+                            <SelectItem value="shipped">Shipped</SelectItem>
+                            <SelectItem value="delivered">Delivered</SelectItem>
+                            <SelectItem value="cancelled">Cancelled</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Date</p>
-                  <p>{format(new Date(selectedOrder.created_at), 'PPP')}</p>
+
+                <div className="border-t pt-4">
+                  <h3 className="text-lg font-medium mb-2 flex items-center gap-2">
+                    <Package size={18} />
+                    Order Items
+                  </h3>
+                  <div className="bg-gray-50 rounded-md p-4">
+                    <p className="font-medium">Product: {orderDetails?.product_name || 'Unknown'}</p>
+                    <p>Quantity: {orderDetails?.quantity || 1}</p>
+                    {orderDetails?.notes && (
+                      <div className="mt-2">
+                        <h4 className="text-sm font-medium">Notes:</h4>
+                        <p className="text-sm text-muted-foreground">{orderDetails.notes}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="border-t pt-4 flex justify-between items-end">
+                  <div>
+                    <Button variant="outline" className="gap-2">
+                      <FileText size={16} />
+                      Download Invoice
+                    </Button>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-muted-foreground mb-1">Total Amount</p>
+                    <p className="text-2xl font-bold text-brand-blue">
+                      {formatPrice(selectedOrder.total_amount)}
+                    </p>
+                  </div>
                 </div>
               </div>
-              
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Status</p>
-                <Badge className={`${getStatusColor(selectedOrder.status)} mt-1`}>
-                  {selectedOrder.status.charAt(0).toUpperCase() + selectedOrder.status.slice(1)}
-                </Badge>
-              </div>
-              
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Customer</p>
-                <p className="font-medium">{selectedOrder.user_name}</p>
-                <p className="text-sm">{selectedOrder.user_email}</p>
-                <p className="text-sm">{selectedOrder.user_phone}</p>
-              </div>
-              
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Product</p>
-                <p className="font-medium">{selectedOrder.product_name}</p>
-                <p className="text-sm">Quantity: {selectedOrder.quantity}</p>
-              </div>
-              
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Payment</p>
-                <p className="text-lg font-semibold">
-                  ₹{(selectedOrder.product_price * selectedOrder.quantity).toFixed(2)}
-                </p>
-              </div>
-              
-              {selectedOrder.notes && (
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Notes</p>
-                  <p className="text-sm">{selectedOrder.notes}</p>
-                </div>
-              )}
-            </div>
-          )}
+            )}
+          </DataState>
         </DialogContent>
       </Dialog>
-
-      {/* Update Status Dialog */}
-      <Dialog open={isStatusDialogOpen} onOpenChange={setIsStatusDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Update Order Status</DialogTitle>
-            <DialogDescription>
-              Change the current status of this order
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 pt-4">
-            <p className="font-medium">Order: {selectedOrder?.id?.substring(0, 8)}</p>
-            <p className="text-sm">Current Status: 
-              <span className={`${selectedOrder ? getStatusColor(selectedOrder.status) : ''} px-2 py-0.5 rounded ml-2`}>
-                {selectedOrder?.status.charAt(0).toUpperCase() + selectedOrder?.status.slice(1)}
-              </span>
-            </p>
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Select New Status:</p>
-              <div className="grid grid-cols-1 gap-2">
-                {['pending', 'accepted', 'processing', 'delivered', 'cancelled'].map((status) => (
-                  <Button
-                    key={status}
-                    variant="outline"
-                    className={`justify-start ${getStatusColor(status)} hover:bg-opacity-80`}
-                    onClick={() => handleStatusUpdate(status)}
-                    disabled={updateStatusMutation.isPending}
-                  >
-                    {status.charAt(0).toUpperCase() + status.slice(1)}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsStatusDialogOpen(false)}>
-              Cancel
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Order Dialog */}
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Order</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this order? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteConfirm}
-              className="bg-red-500 hover:bg-red-600"
-            >
-              {deleteOrderMutation.isPending ? 'Deleting...' : 'Delete'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 };
