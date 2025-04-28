@@ -82,6 +82,9 @@ export const measurementService = {
   updateMeasurementType: (typeId: string, data: { name?: string; description?: string }) => api.put(`/measurement-types/${typeId}`, data),
   deleteMeasurementType: (typeId: string) => api.delete(`/measurement-types/${typeId}`),
   
+  // Add the missing method for getting measurement type sections
+  getMeasurementTypeSection: (typeId: string) => api.get(`/measurement-types/${typeId}/sections`),
+  
   // Updated measurement methods to align with errors
   getMeasurement: (measurementId: string) => api.get(`/measurements/${measurementId}`),
   getMeasurements: (userId: string, userType: string) => api.get(`/measurements?user_id=${userId}&user_type=${userType}`),
