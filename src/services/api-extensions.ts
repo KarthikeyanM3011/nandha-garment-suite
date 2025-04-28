@@ -1,63 +1,131 @@
-import api from './api';
+import axios from 'axios';
 
-// Organization Extensions
-export const organizationService = {
-  getAllOrganizations: async () => {
-    console.log('Fetching all organizations');
-    return api.get('/api/users/org/all');
+const api = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api',
+  headers: {
+    'Content-Type': 'application/json',
   },
+});
 
-  getOrganizationById: async (orgId: string) => {
-    console.log(`Fetching organization with ID: ${orgId}`);
-    return api.get(`/api/users/org_admin/${orgId}`);
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
   },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
-  deleteOrganization: async (orgId: string) => {
-    console.log(`Deleting organization with ID: ${orgId}`);
-    return api.delete(`/api/users/org_admin/${orgId}`);
-  },
-
-  updateOrganization: async (orgId: string, data: any) => {
-    console.log(`Updating organization with ID: ${orgId}`, data);
-    return api.put(`/api/users/org_admin/${orgId}`, data);
-  },
+// Auth service
+export const authService = {
+  login: (credentials: any) => api.post('/auth/login', credentials),
+  signup: (userData: any) => api.post('/auth/register', userData),
+  logout: () => api.post('/auth/logout'),
+  resetPassword: (email: string) => api.post('/auth/reset-password', { email }),
+  verifyResetToken: (token: string) => api.get(`/auth/reset-password/verify?token=${token}`),
+  updatePassword: (token: string, password: string) => api.post('/auth/update-password', { token, password }),
+  getMe: () => api.get('/auth/me'),
 };
 
-// Orders Extensions
+// Organization service
+export const organizationService = {
+  getAllOrganizations: () => api.get('/organizations'),
+  createOrganization: (data: any) => api.post('/organizations', data),
+  getOrganizationById: (id: string) => api.get(`/organizations/${id}`),
+  updateOrganization: (id: string, data: any) => api.put(`/organizations/${id}`, data),
+  deleteOrganization: (id: string) => api.delete(`/organizations/${id}`),
+};
+
+// Product service
+export const productService = {
+  getAllProducts: () => api.get('/products'),
+  createProduct: (data: any) => api.post('/products', data),
+  getProductById: (id: string) => api.get(`/products/${id}`),
+  updateProduct: (id: string, data: any) => api.put(`/products/${id}`, data),
+  deleteProduct: (id: string) => api.delete(`/products/${id}`),
+};
+
+// Order service
 export const orderService = {
-  getAllOrders: async () => {
-    console.log('Fetching all orders');
-    return api.get('/orders/all');
-  },
+  getOrders: (queryString: string) => api.get(`/orders?${queryString}`),
+  getOrderById: (id: string) => api.get(`/orders/${id}`),
+  createOrder: (data: any) => api.post('/orders', data),
+  updateOrderStatus: (id: string, data: { status: string }) => api.put(`/orders/${id}/status`, data),
+  deleteOrder: (id: string) => api.delete(`/orders/${id}`),
+};
 
-  getOrdersByOrganization: async (orgId: string) => {
-    console.log(`Fetching orders for organization ID: ${orgId}`);
-    return api.get(`/api/orders/by_organization/${orgId}`);
-  },
-
-  getOrdersByUser: async (userId: string, userType: string) => {
-    console.log(`Fetching orders for user ID: ${userId} and user type: ${userType}`);
-    return api.get(`/api/orders/by_user/${userId}/${userType}`);
-  },
-
-  createOrder: async (data: {
+// Measurement service extensions
+export const measurementService = {
+  getMeasurementTypes: () => api.get('/measurement-types'),
+  createMeasurementType: (data: { name: string; description?: string }) => api.post('/measurement-types', data),
+  getMeasurementType: (typeId: string) => api.get(`/measurement-types/${typeId}`),
+  updateMeasurementType: (typeId: string, data: { name?: string; description?: string }) => api.put(`/measurement-types/${typeId}`, data),
+  deleteMeasurementType: (typeId: string) => api.delete(`/measurement-types/${typeId}`),
+  
+  getMeasurements: (userId: string, userType: string) => api.get(`/measurements?user_id=${userId}&user_type=${userType}`),
+  getMeasurement: (measurementId: string) => api.get(`/measurements/${measurementId}`),
+  createMeasurement: (data: {
     user_id: string;
     user_type: string;
-    org_user_id?: string;
-    items: Array<{ product_id: string; quantity: number; price: number }>;
-    total_amount: number;
-  }) => {
-    console.log('Creating order with data:', data);
-    return api.post('/api/orders/create', data);
-  },
+    measurement_type_id: string;
+    values: Array<{ field_id: string; value: string }>;
+  }) => api.post('/measurements', data),
+  updateMeasurement: (measurementId: string, data: {
+    values: Array<{ field_id: string; value: string }>;
+  }) => api.put(`/measurements/${measurementId}`, data),
+  deleteMeasurement: (measurementId: string) => api.delete(`/measurements/${measurementId}`),
+  getAllMeasurements: () => api.get('/measurements'),
+};
 
-  updateOrderStatus: async (orderId: string, status: string) => {
-    console.log(`Updating order status. Order ID: ${orderId}, New Status: ${status}`);
-    return api.post('/api/orders/update_status', { order_id: orderId, status });
-  },
-
-  getOrderDetails: async (orderId: string) => {
-    console.log(`Fetching order details for Order ID: ${orderId}`);
-    return api.get(`/api/orders/details/${orderId}`);
-  },
+// Extend userService with additional methods
+export const userService = {
+  getUsers: () => api.get('/users'),
+  getUserById: (id: string) => api.get(`/users/${id}`),
+  updateUser: (id: string, data: any) => api.put(`/users/${id}`, data),
+  deleteUser: (id: string) => api.delete(`/users/${id}`),
+  
+  getAllOrgUsers: (orgId: string) => api.get(`/org-users?org_id=${orgId}`),
+  createOrgUser: (data: {
+    org_id: string;
+    name: string;
+    email: string;
+    phone: string;
+    address: string;
+    password: string;
+    department?: string;
+    is_admin?: boolean;
+    created_by: string;
+  }) => api.post('/org-users', data),
+  updateOrgUser: (userId: string, data: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    password?: string;
+    department?: string;
+    is_admin?: boolean;
+  }) => api.put(`/org-users/${userId}`, data),
+  deleteOrgUser: (userId: string) => api.delete(`/org-users/${userId}`),
+  
+  getIndividualUsers: () => api.get('/individuals'),
+  createIndividual: (data: {
+    name: string;
+    email: string;
+    password: string;
+    phone: string;
+    address: string;
+    age?: number;
+  }) => api.post('/individuals', data),
+  updateIndividualUser: (userId: string, data: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    password?: string;
+  }) => api.put(`/individuals/${userId}`, data),
+  deleteIndividualUser: (userId: string) => api.delete(`/individuals/${userId}`),
 };

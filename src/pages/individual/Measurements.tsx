@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { measurementService } from '@/services/api';
@@ -80,7 +79,7 @@ const IndividualMeasurements = () => {
       if (!userData?.id) throw new Error('User ID is required');
       
       try {
-        const response = await measurementService.getMeasurementsByUser(
+        const response = await measurementService.getMeasurements(
           userData.id, 
           'INDIVIDUAL'
         );

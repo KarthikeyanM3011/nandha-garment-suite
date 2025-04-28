@@ -1,563 +1,516 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
-import { productService } from '@/services/api';
-import { orderService } from '@/services/api-extensions';
 import { userService } from '@/services/api';
-import { toast } from 'sonner';
+import { productService } from '@/services/api';
+import { orderService } from '@/services/api';
+import { measurementService } from '@/services/api';
 import { DataState } from '@/components/ui/data-state';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ShoppingBag, Search, Plus, Minus, ArrowLeft, Users, Trash2, ShoppingCart } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { toast } from 'sonner';
+import { z } from 'zod';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { ArrowLeft, ShoppingBag, User, Ruler, ArrowRight } from 'lucide-react';
+
+// Define schema for order creation
+const orderFormSchema = z.object({
+  user_id: z.string().min(1, { message: "User is required" }),
+  product_id: z.string().min(1, { message: "Product is required" }),
+  measurement_id: z.string().optional(),
+  quantity: z.coerce.number().int().min(1, { message: "Quantity must be at least 1" }),
+  notes: z.string().optional(),
+});
+
+type OrderFormValues = z.infer<typeof orderFormSchema>;
 
 interface NewOrderProps {
   isOrgAdmin: boolean;
 }
 
-interface Product {
-  id: string;
-  name: string;
-  category_id: string;
-  description: string;
-  price: number;
-  image: string;
-  created_at: string;
-  updated_at: string;
-  category_name: string;
-}
-
-interface Category {
-  id: string;
-  name: string;
-  description: string;
-  created_at: string;
-  updated_at: string;
-}
-
-interface OrgUser {
-  id: string;
-  name: string;
-  email: string;
-  department: string;
-}
-
-interface CartItem {
-  product: Product;
-  quantity: number;
-}
-
-const NewOrder = ({ isOrgAdmin }: NewOrderProps) => {
-  const navigate = useNavigate();
+const NewOrder: React.FC<NewOrderProps> = ({ isOrgAdmin }) => {
   const { userData } = useAuth();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const [selectedUser, setSelectedUser] = useState<OrgUser | null>(null);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState("user");
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
 
-  // If individual user, set their ID as the selected user
-  useEffect(() => {
-    if (!isOrgAdmin && userData?.id) {
-      setSelectedUserId(userData.id);
-    }
-  }, [isOrgAdmin, userData?.id]);
+  // Initialize form
+  const form = useForm<OrderFormValues>({
+    resolver: zodResolver(orderFormSchema),
+    defaultValues: {
+      user_id: "",
+      product_id: "",
+      measurement_id: "",
+      quantity: 1,
+      notes: "",
+    },
+  });
 
-  // Fetch all products
-  const { 
-    data: products, 
-    isLoading: productsLoading, 
-    error: productsError 
+  // Get org_id for organization admin
+  const orgId = userData?.org_id;
+  
+  // Fetch users based on user role
+  const {
+    data: users,
+    isLoading: isUsersLoading,
+    error: usersError
   } = useQuery({
-    queryKey: ['products', selectedCategory],
+    queryKey: ['users', isOrgAdmin ? 'org' : 'individual', orgId],
     queryFn: async () => {
       try {
-        let response;
-        if (selectedCategory === 'all') {
-          response = await productService.getAllProducts();
+        if (isOrgAdmin) {
+          if (!orgId) throw new Error("Organization ID is required");
+          const response = await userService.getAllOrgUsers(orgId);
+          return response.data.users || [];
         } else {
-          response = await productService.getProductsByCategory(selectedCategory);
+          // For individual users, we just return the current user
+          return [userData];
         }
+      } catch (error) {
+        console.error('Failed to fetch users:', error);
+        throw new Error('Failed to fetch users');
+      }
+    },
+    enabled: isOrgAdmin ? !!orgId : !!userData?.id
+  });
+
+  // Fetch products
+  const {
+    data: products,
+    isLoading: isProductsLoading,
+    error: productsError
+  } = useQuery({
+    queryKey: ['products'],
+    queryFn: async () => {
+      try {
+        const response = await productService.getAllProducts();
         return response.data.products || [];
-      } catch (err) {
-        console.error('Failed to fetch products:', err);
+      } catch (error) {
+        console.error('Failed to fetch products:', error);
         throw new Error('Failed to fetch products');
       }
     }
   });
 
-  // Fetch product categories
-  const { 
-    data: categories, 
-    isLoading: categoriesLoading, 
-    error: categoriesError 
+  // Fetch measurements for selected user
+  const {
+    data: measurements,
+    isLoading: isMeasurementsLoading,
+    error: measurementsError
   } = useQuery({
-    queryKey: ['productCategories'],
+    queryKey: ['measurements', selectedUser],
     queryFn: async () => {
-      try {
-        const response = await productService.getProductCategories();
-        return response.data.categories || [];
-      } catch (err) {
-        console.error('Failed to fetch product categories:', err);
-        throw new Error('Failed to fetch product categories');
-      }
-    }
-  });
-
-  // Fetch organization users (only for org admin)
-  const { 
-    data: orgUsers, 
-    isLoading: orgUsersLoading, 
-    error: orgUsersError 
-  } = useQuery({
-    queryKey: ['orgUsers', userData?.org_id],
-    queryFn: async () => {
-      if (!userData?.org_id) throw new Error('Organization ID is required');
+      if (!selectedUser) return [];
       
       try {
-        const response = await userService.getOrgUsers(userData.org_id);
-        return response.data.users || [];
-      } catch (err) {
-        console.error('Failed to fetch organization users:', err);
-        throw new Error('Failed to fetch organization users');
+        // Get user type based on isOrgAdmin
+        const userType = isOrgAdmin ? 'ORG_USER' : 'INDIVIDUAL';
+        
+        const response = await measurementService.getMeasurements(selectedUser, userType);
+        return response.data.measurements || [];
+      } catch (error) {
+        console.error('Failed to fetch measurements:', error);
+        throw new Error('Failed to fetch measurements');
       }
     },
-    enabled: isOrgAdmin && !!userData?.org_id,
+    enabled: !!selectedUser
   });
 
   // Create order mutation
   const createOrderMutation = useMutation({
-    mutationFn: async () => {
-      if (!userData?.id) throw new Error('User ID is required');
-      if (isOrgAdmin && !selectedUserId) throw new Error('Please select a user to place an order');
-      if (cart.length === 0) throw new Error('Cart cannot be empty');
-
-      const userId = isOrgAdmin ? selectedUserId : userData.id;
-      const userType = isOrgAdmin ? 'ORG_USER' : 'INDIVIDUAL';
-      
-      const orderData = {
-        user_id: userId!,
-        user_type: userType,
-        org_user_id: isOrgAdmin ? userData.id : undefined,
-        items: cart.map(item => ({
-          product_id: item.product.id,
-          quantity: item.quantity,
-          price: item.product.price
-        })),
-        total_amount: cart.reduce((total, item) => total + (item.product.price * item.quantity), 0)
-      };
-
-      return await orderService.createOrder(orderData);
+    mutationFn: async (data: OrderFormValues) => {
+      return await orderService.createOrder(data);
     },
     onSuccess: () => {
-      toast.success('Order placed successfully!');
+      toast.success('Order created successfully');
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      // Navigate based on user role
       navigate(isOrgAdmin ? '/org-admin/orders' : '/individual/orders');
     },
     onError: (error: any) => {
-      toast.error(`Failed to place order: ${error.message}`);
+      toast.error(`Failed to create order: ${error.message}`);
     }
   });
 
-  // Filter products based on search term
-  const filteredProducts = products ? products.filter((product: Product) => {
-    return searchTerm === '' || 
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.category_name.toLowerCase().includes(searchTerm.toLowerCase());
-  }) : [];
-
-  // Filter users based on search term
-  const filteredUsers = orgUsers ? orgUsers.filter((user: OrgUser) => {
-    return searchTerm === '' || 
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.department?.toLowerCase().includes(searchTerm.toLowerCase());
-  }) : [];
-
-  // Add product to cart
-  const addToCart = (product: Product) => {
-    setCart((prev) => {
-      const existingItem = prev.find((item) => item.product.id === product.id);
-      if (existingItem) {
-        return prev.map((item) => 
-          item.product.id === product.id 
-            ? { ...item, quantity: item.quantity + 1 } 
-            : item
-        );
-      }
-      return [...prev, { product, quantity: 1 }];
-    });
-    toast.success(`${product.name} added to cart`);
-  };
-
-  // Update cart item quantity
-  const updateCartItemQuantity = (productId: string, newQuantity: number) => {
-    if (newQuantity < 1) {
-      setCart((prev) => prev.filter((item) => item.product.id !== productId));
-      return;
+  // Handle form submission
+  const onSubmit = (data: OrderFormValues) => {
+    if (data.measurement_id === "") {
+      delete data.measurement_id;
     }
-    
-    setCart((prev) => 
-      prev.map((item) => 
-        item.product.id === productId 
-          ? { ...item, quantity: newQuantity } 
-          : item
-      )
-    );
+    createOrderMutation.mutate(data);
   };
 
-  // Remove item from cart
-  const removeFromCart = (productId: string) => {
-    setCart((prev) => prev.filter((item) => item.product.id !== productId));
-    toast.success("Item removed from cart");
-  };
-
-  // Handle user selection (for org admin)
-  const handleUserSelect = (userId: string) => {
-    const user = orgUsers?.find((u: OrgUser) => u.id === userId);
-    if (user) {
-      setSelectedUserId(userId);
-      setSelectedUser(user);
+  // Update form value when user is selected
+  useEffect(() => {
+    if (selectedUser) {
+      form.setValue('user_id', selectedUser);
     }
-  };
+  }, [selectedUser, form]);
 
-  // Calculate total cart value
-  const cartTotal = cart.reduce((total, item) => {
-    return total + (item.product.price * item.quantity);
-  }, 0);
+  // Update form value when product is selected
+  useEffect(() => {
+    if (selectedProduct) {
+      form.setValue('product_id', selectedProduct);
+    }
+  }, [selectedProduct, form]);
 
-  // Format price
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-    }).format(price);
-  };
-
-  // Handle place order
-  const handlePlaceOrder = () => {
-    createOrderMutation.mutate();
-  };
-
-  // Handle back navigation
+  // Handle back button
   const handleBack = () => {
     navigate(isOrgAdmin ? '/org-admin/orders' : '/individual/orders');
   };
 
-  const isLoading = productsLoading || categoriesLoading || (isOrgAdmin && orgUsersLoading);
-  const error = productsError || categoriesError || (isOrgAdmin && orgUsersError);
+  // Handle next step
+  const handleNext = () => {
+    if (activeTab === "user") {
+      if (!selectedUser) {
+        toast.error("Please select a user");
+        return;
+      }
+      setActiveTab("product");
+    } else if (activeTab === "product") {
+      if (!selectedProduct) {
+        toast.error("Please select a product");
+        return;
+      }
+      setActiveTab("measurement");
+    } else if (activeTab === "measurement") {
+      setActiveTab("review");
+    }
+  };
+
+  // Handle previous step
+  const handlePrev = () => {
+    if (activeTab === "product") {
+      setActiveTab("user");
+    } else if (activeTab === "measurement") {
+      setActiveTab("product");
+    } else if (activeTab === "review") {
+      setActiveTab("measurement");
+    }
+  };
 
   return (
     <div className="space-y-8 animate-fade-in">
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <Button variant="outline" size="icon" onClick={handleBack}>
-            <ArrowLeft size={18} />
-          </Button>
-          <div>
-            <h2 className="text-3xl font-bold tracking-tight text-gray-900">Place New Order</h2>
-            <p className="text-muted-foreground">
-              {isOrgAdmin 
-                ? 'Create a new order for a user in your organization' 
-                : 'Browse products and place your order'
-              }
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="text-sm text-muted-foreground">
-            <span className="font-medium">{cart.length}</span> items
-          </div>
-          <Badge variant="outline" className="gap-1 px-3 py-1 text-brand-blue border-brand-blue">
-            <ShoppingCart size={14} />
-            <span className="font-bold">{formatPrice(cartTotal)}</span>
-          </Badge>
+      <div className="flex items-center gap-3">
+        <Button variant="outline" size="icon" onClick={handleBack}>
+          <ArrowLeft size={18} />
+        </Button>
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight text-gray-900">New Order</h2>
+          <p className="text-muted-foreground">Create a new order for a customer</p>
         </div>
       </div>
 
-      {/* For org admin: User selection */}
-      {isOrgAdmin && (
-        <Card className="mb-6">
-          <CardHeader className="bg-gray-50 border-b py-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Users size={18} />
-              Select User
-            </CardTitle>
-            <CardDescription>
-              Select the user you want to place this order for
-            </CardDescription>
+      <div className="max-w-4xl mx-auto">
+        <Card>
+          <CardHeader>
+            <CardTitle>Create New Order</CardTitle>
           </CardHeader>
-          <CardContent className="p-4">
-            <DataState
-              isLoading={orgUsersLoading}
-              error={orgUsersError}
-              isEmpty={!filteredUsers || filteredUsers.length === 0}
-              emptyMessage="No users found in your organization"
-            >
-              <div className="space-y-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                  <Input
-                    placeholder="Search users by name or department"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {filteredUsers?.map((user: OrgUser) => (
-                    <button
-                      key={user.id}
-                      className={`p-4 rounded-lg border ${selectedUserId === user.id ? 'border-brand-blue bg-brand-blue/5' : 'hover:border-gray-300'} text-left transition-colors`}
-                      onClick={() => handleUserSelect(user.id)}
-                    >
-                      <h3 className="font-medium">{user.name}</h3>
-                      <p className="text-sm text-muted-foreground">{user.email}</p>
-                      {user.department && (
-                        <Badge variant="outline" className="mt-2">
-                          {user.department}
-                        </Badge>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </DataState>
-          </CardContent>
-        </Card>
-      )}
+          <CardContent>
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="grid grid-cols-4 mb-8">
+                <TabsTrigger value="user" className="gap-2">
+                  <User size={16} /> Select User
+                </TabsTrigger>
+                <TabsTrigger value="product" className="gap-2">
+                  <ShoppingBag size={16} /> Choose Product
+                </TabsTrigger>
+                <TabsTrigger value="measurement" className="gap-2">
+                  <Ruler size={16} /> Select Measurements
+                </TabsTrigger>
+                <TabsTrigger value="review" className="gap-2">
+                  Order Details
+                </TabsTrigger>
+              </TabsList>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Products Browse Section */}
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader className="bg-gray-50 border-b py-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <ShoppingBag size={18} />
-                Products
-              </CardTitle>
-              <CardDescription>
-                Browse products and add them to your cart
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-4">
-              <div className="space-y-6">
-                <div className="flex flex-col md:flex-row gap-4">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                    <Input
-                      placeholder="Search products by name or description"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                  <Select
-                    value={selectedCategory}
-                    onValueChange={setSelectedCategory}
-                  >
-                    <SelectTrigger className="w-full md:w-[200px]">
-                      <SelectValue placeholder="Filter by category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Categories</SelectItem>
-                      {categories?.map((category: Category) => (
-                        <SelectItem key={category.id} value={category.id}>
-                          {category.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                  <TabsContent value="user">
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-medium">Select User</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {isOrgAdmin ? "Choose the user for whom you're creating the order" : "Confirm your details for this order"}
+                      </p>
 
-                <DataState
-                  isLoading={isLoading}
-                  error={error}
-                  isEmpty={!filteredProducts || filteredProducts.length === 0}
-                  emptyMessage="No products found. Try adjusting your search or filter."
-                >
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {filteredProducts.map((product: Product) => (
-                      <Card key={product.id} className="overflow-hidden hover:shadow-md transition-all">
-                        <div className="flex h-full">
-                          {product.image && (
-                            <div className="w-1/3 bg-gray-100">
-                              <img
-                                src={product.image}
-                                alt={product.name}
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  e.currentTarget.src = 'https://placehold.co/300x200?text=No+Image';
-                                }}
-                              />
+                      <DataState
+                        isLoading={isUsersLoading}
+                        error={usersError}
+                        isEmpty={!users || users.length === 0}
+                        emptyMessage="No users available"
+                      >
+                        <div className="space-y-4">
+                          {isOrgAdmin ? (
+                            <RadioGroup
+                              value={selectedUser || ""}
+                              onValueChange={setSelectedUser}
+                              className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
+                            >
+                              {users?.map((user: any) => (
+                                <div key={user.id} className="relative">
+                                  <RadioGroupItem
+                                    value={user.id}
+                                    id={`user-${user.id}`}
+                                    className="absolute top-4 left-4 z-10"
+                                  />
+                                  <Label
+                                    htmlFor={`user-${user.id}`}
+                                    className={`block p-4 border rounded-md cursor-pointer ${selectedUser === user.id ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-primary'}`}
+                                  >
+                                    <div className="font-medium">{user.name}</div>
+                                    <div className="text-sm text-muted-foreground">{user.email}</div>
+                                    {user.department && (
+                                      <div className="mt-1 text-xs bg-gray-100 inline-block px-2 py-1 rounded">
+                                        {user.department}
+                                      </div>
+                                    )}
+                                  </Label>
+                                </div>
+                              ))}
+                            </RadioGroup>
+                          ) : (
+                            <div className="p-4 border rounded-md bg-gray-50">
+                              <div className="font-medium">{userData?.name}</div>
+                              <div className="text-sm text-muted-foreground">{userData?.email}</div>
+                              {userData && <div className="hidden">
+                                {setSelectedUser(userData.id)}
+                              </div>}
                             </div>
                           )}
-                          <div className="w-2/3 flex flex-col">
-                            <CardHeader className="pb-2">
-                              <div className="flex justify-between">
-                                <Badge variant="outline" className="bg-blue-50">
-                                  {product.category_name}
-                                </Badge>
-                              </div>
-                              <CardTitle className="mt-2 text-lg">{product.name}</CardTitle>
-                            </CardHeader>
-                            <CardContent className="py-2">
-                              <p className="text-muted-foreground text-sm line-clamp-2">
-                                {product.description || "No description available"}
-                              </p>
-                              <p className="text-xl font-bold text-brand-blue mt-2">
-                                {formatPrice(product.price)}
-                              </p>
-                            </CardContent>
-                            <CardFooter className="mt-auto">
-                              <Button 
-                                onClick={() => addToCart(product)} 
-                                className="w-full gap-2"
-                                size="sm"
-                              >
-                                <Plus size={14} />
-                                Add to Cart
-                              </Button>
-                            </CardFooter>
-                          </div>
                         </div>
-                      </Card>
-                    ))}
-                  </div>
-                </DataState>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                      </DataState>
+                    </div>
 
-        {/* Cart Section */}
-        <div>
-          <Card className="sticky top-24">
-            <CardHeader className="bg-gray-50 border-b py-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <ShoppingCart size={18} />
-                Your Cart
-              </CardTitle>
-              <CardDescription>
-                Review your items before placing the order
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-4">
-              {cart.length === 0 ? (
-                <div className="text-center py-12 bg-gray-50 rounded-md">
-                  <ShoppingBag size={36} className="mx-auto text-gray-300 mb-2" />
-                  <p className="text-muted-foreground">Your cart is empty.</p>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Browse products and add them to your cart.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="space-y-3 max-h-[400px] overflow-auto pr-1">
-                    {cart.map((item) => (
-                      <div 
-                        key={item.product.id}
-                        className="flex justify-between p-3 border rounded-md hover:bg-gray-50"
+                    <div className="flex justify-end mt-6">
+                      <Button type="button" onClick={handleNext} className="gap-2">
+                        Next <ArrowRight size={16} />
+                      </Button>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="product">
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-medium">Choose Product</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Select the product you want to order
+                      </p>
+
+                      <DataState
+                        isLoading={isProductsLoading}
+                        error={productsError}
+                        isEmpty={!products || products.length === 0}
+                        emptyMessage="No products available"
                       >
-                        <div className="flex gap-3">
-                          <img
-                            src={item.product.image || 'https://placehold.co/100?text=No+Image'}
-                            alt={item.product.name}
-                            className="w-12 h-12 object-cover rounded"
-                            onError={(e) => {
-                              e.currentTarget.src = 'https://placehold.co/100?text=No+Image';
-                            }}
-                          />
-                          <div>
-                            <p className="font-medium">{item.product.name}</p>
-                            <p className="text-brand-blue font-medium text-sm">
-                              {formatPrice(item.product.price)}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="flex items-center border rounded-md">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 rounded-none text-gray-500"
-                              onClick={() => updateCartItemQuantity(item.product.id, item.quantity - 1)}
-                            >
-                              <Minus size={14} />
-                            </Button>
-                            <span className="w-8 text-center">{item.quantity}</span>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 rounded-none text-gray-500"
-                              onClick={() => updateCartItemQuantity(item.product.id, item.quantity + 1)}
-                            >
-                              <Plus size={14} />
-                            </Button>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
-                            onClick={() => removeFromCart(item.product.id)}
+                        <div className="space-y-4">
+                          <RadioGroup
+                            value={selectedProduct || ""}
+                            onValueChange={setSelectedProduct}
+                            className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
                           >
-                            <Trash2 size={16} />
-                          </Button>
+                            {products?.map((product: any) => (
+                              <div key={product.id} className="relative">
+                                <RadioGroupItem
+                                  value={product.id}
+                                  id={`product-${product.id}`}
+                                  className="absolute top-4 left-4 z-10"
+                                />
+                                <Label
+                                  htmlFor={`product-${product.id}`}
+                                  className={`block p-4 border rounded-md cursor-pointer ${selectedProduct === product.id ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-primary'}`}
+                                >
+                                  {product.image && (
+                                    <div className="w-full h-40 mb-2 bg-gray-100 rounded-md flex items-center justify-center overflow-hidden">
+                                      <img 
+                                        src={product.image} 
+                                        alt={product.name} 
+                                        className="w-full h-full object-cover"
+                                      />
+                                    </div>
+                                  )}
+                                  <div className="font-medium">{product.name}</div>
+                                  <div className="text-sm text-muted-foreground">₹{product.price}</div>
+                                  {product.category && (
+                                    <div className="mt-1 text-xs bg-gray-100 inline-block px-2 py-1 rounded">
+                                      {product.category}
+                                    </div>
+                                  )}
+                                </Label>
+                              </div>
+                            ))}
+                          </RadioGroup>
+                        </div>
+                      </DataState>
+                    </div>
+
+                    <div className="flex justify-between mt-6">
+                      <Button type="button" variant="outline" onClick={handlePrev} className="gap-2">
+                        <ArrowLeft size={16} /> Back
+                      </Button>
+                      <Button type="button" onClick={handleNext} className="gap-2">
+                        Next <ArrowRight size={16} />
+                      </Button>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="measurement">
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-medium">Select Measurements</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Choose measurements for the product or skip this step if not needed
+                      </p>
+
+                      <FormField
+                        control={form.control}
+                        name="measurement_id"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Measurements</FormLabel>
+                            <FormControl>
+                              <Select 
+                                value={field.value} 
+                                onValueChange={field.onChange}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select a measurement" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="">None (Skip)</SelectItem>
+                                  {measurements?.map((measurement: any) => (
+                                    <SelectItem key={measurement.id} value={measurement.id}>
+                                      {measurement.type_name || 'Measurement'} - {new Date(measurement.created_at).toLocaleDateString()}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      {isMeasurementsLoading && (
+                        <div className="text-center p-4">Loading measurements...</div>
+                      )}
+
+                      {!isMeasurementsLoading && (!measurements || measurements.length === 0) && (
+                        <div className="p-4 border rounded bg-yellow-50 text-yellow-800">
+                          <p>No measurements found for this user.</p>
+                          <p className="text-sm mt-1">You can continue without selecting measurements or add measurements first.</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex justify-between mt-6">
+                      <Button type="button" variant="outline" onClick={handlePrev} className="gap-2">
+                        <ArrowLeft size={16} /> Back
+                      </Button>
+                      <Button type="button" onClick={handleNext} className="gap-2">
+                        Next <ArrowRight size={16} />
+                      </Button>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="review">
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-medium">Order Details</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Review your order and add final details
+                      </p>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <FormField
+                          control={form.control}
+                          name="quantity"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Quantity</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="number" 
+                                  min="1" 
+                                  {...field} 
+                                  onChange={e => field.onChange(parseInt(e.target.value) || 1)}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="notes"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Notes (Optional)</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Add any special instructions" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <div className="border rounded-md p-4 space-y-2">
+                        <h4 className="font-semibold">Order Summary</h4>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div className="text-muted-foreground">User:</div>
+                          <div>{users?.find((user: any) => user.id === selectedUser)?.name || 'Unknown'}</div>
+                          
+                          <div className="text-muted-foreground">Product:</div>
+                          <div>{products?.find((product: any) => product.id === selectedProduct)?.name || 'Unknown'}</div>
+                          
+                          <div className="text-muted-foreground">Price:</div>
+                          <div>₹{products?.find((product: any) => product.id === selectedProduct)?.price || 0}</div>
+
+                          <div className="text-muted-foreground">Quantity:</div>
+                          <div>{form.watch("quantity")}</div>
+
+                          <div className="text-muted-foreground">Measurement:</div>
+                          <div>
+                            {form.watch("measurement_id") 
+                              ? measurements?.find((m: any) => m.id === form.watch("measurement_id"))?.type_name || 'Selected'
+                              : 'None'}
+                          </div>
+
+                          <div className="text-muted-foreground">Total:</div>
+                          <div className="font-semibold">
+                            ₹{(form.watch("quantity") || 1) * (products?.find((product: any) => product.id === selectedProduct)?.price || 0)}
+                          </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    </div>
 
-                  <div className="border-t pt-4 space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Subtotal</span>
-                      <span>{formatPrice(cartTotal)}</span>
+                    <div className="flex justify-between mt-6">
+                      <Button type="button" variant="outline" onClick={handlePrev} className="gap-2">
+                        <ArrowLeft size={16} /> Back
+                      </Button>
+                      <Button type="submit" disabled={createOrderMutation.isPending} className="gap-2">
+                        {createOrderMutation.isPending ? 'Creating...' : 'Create Order'}
+                      </Button>
                     </div>
-                    <div className="flex justify-between font-medium">
-                      <span>Total</span>
-                      <span className="text-xl font-bold text-brand-blue">
-                        {formatPrice(cartTotal)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-            <CardFooter className="border-t bg-gray-50 p-4">
-              <Button 
-                className="w-full gap-2" 
-                size="lg"
-                onClick={handlePlaceOrder}
-                disabled={
-                  cart.length === 0 || 
-                  createOrderMutation.isPending ||
-                  (isOrgAdmin && !selectedUserId)
-                }
-              >
-                {createOrderMutation.isPending ? (
-                  'Processing...'
-                ) : (
-                  <>
-                    <ShoppingCart size={16} />
-                    Place Order
-                  </>
-                )}
-              </Button>
-              {isOrgAdmin && !selectedUserId && (
-                <p className="text-xs text-red-500 mt-2 text-center w-full">
-                  Please select a user before placing the order
-                </p>
-              )}
-            </CardFooter>
-          </Card>
-        </div>
+                  </TabsContent>
+                </form>
+              </Form>
+            </Tabs>
+          </CardContent>
+          <CardFooter className="border-t bg-gray-50 flex justify-between">
+            <p className="text-sm text-muted-foreground">
+              {isOrgAdmin ? 'Creating order as organization admin' : 'Creating order for yourself'}
+            </p>
+          </CardFooter>
+        </Card>
       </div>
     </div>
   );

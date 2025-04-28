@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -17,6 +16,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Define types
 interface Organization {
@@ -62,6 +62,7 @@ const OrganizationDetails = () => {
   const [activeTab, setActiveTab] = useState('details');
   const [isAddUserDialogOpen, setIsAddUserDialogOpen] = useState(false);
   const [isEditOrgDialogOpen, setIsEditOrgDialogOpen] = useState(false);
+  const { userData } = useAuth();
 
   // Fetch organization details
   const { 
@@ -95,7 +96,7 @@ const OrganizationDetails = () => {
       if (!orgId) throw new Error('Organization ID is required');
       
       try {
-        const response = await userService.getOrgUsers(orgId);
+        const response = await userService.getAllOrgUsers(orgId);
         return response.data.users || [];
       } catch (err) {
         console.error('Failed to fetch organization users:', err);
@@ -130,6 +131,7 @@ const OrganizationDetails = () => {
       return await userService.createOrgUser({
         ...data,
         org_id: orgId,
+        created_by: userData?.id || 'super-admin',
       });
     },
     onSuccess: () => {

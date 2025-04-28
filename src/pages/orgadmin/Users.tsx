@@ -1,104 +1,110 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { userService } from '@/services/api';
+import { userService } from '@/services/api-extensions';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { DataState } from '@/components/ui/data-state';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Pencil, Trash2, Search } from 'lucide-react';
+import { Plus, Edit, Trash2, UserPlus } from 'lucide-react';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Switch } from '@/components/ui/switch';
 
-// Define types
-interface OrgUser {
-  id: string;
-  org_id: string;
-  name: string;
-  email: string;
-  phone: string;
-  address: string;
-  department: string;
-  is_admin: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-// Define form schema
+// Define the user schema
 const userFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters" }),
   email: z.string().email({ message: "Please enter a valid email address" }),
   phone: z.string().min(10, { message: "Phone number must be at least 10 characters" }),
   address: z.string().min(5, { message: "Address must be at least 5 characters" }),
-  department: z.string().min(2, { message: "Department must be at least 2 characters" }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters" }),
+  password: z.string().min(6, { message: "Password must be at least 6 characters" }).optional(),
+  department: z.string().optional(),
   is_admin: z.boolean().default(false),
 });
 
-const Users = () => {
+type UserFormValues = z.infer<typeof userFormSchema>;
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  department?: string;
+  is_admin: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+const OrgAdminUsers = () => {
   const { userData } = useAuth();
   const queryClient = useQueryClient();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<OrgUser | null>(null);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
-  // Fetch organization users
-  const { data: users, isLoading, error } = useQuery({
-    queryKey: ['orgUsers', userData?.org_id],
+  const orgId = userData?.org_id;
+
+  // Fetch users
+  const { 
+    data: users, 
+    isLoading, 
+    error 
+  } = useQuery({
+    queryKey: ['users', orgId],
     queryFn: async () => {
-      if (!userData?.org_id) throw new Error('Organization ID is required');
-      
+      if (!orgId) throw new Error('Organization ID is required');
       try {
-        const response = await userService.getOrgUsers(userData.org_id);
-        console.log('Organization users fetched:', response.data);
+        const response = await userService.getAllOrgUsers(orgId);
         return response.data.users || [];
       } catch (err) {
-        console.error('Failed to fetch organization users:', err);
-        throw new Error('Failed to fetch organization users');
+        console.error('Failed to fetch users:', err);
+        throw new Error('Failed to fetch users');
       }
     },
-    enabled: !!userData?.org_id,
+    enabled: !!orgId,
   });
 
-  // Create user mutation
-  const createUserMutation = useMutation({
-    mutationFn: async (data: z.infer<typeof userFormSchema>) => {
-      if (!userData?.org_id) throw new Error('Organization ID is required');
+  // Add user mutation
+  const addUserMutation = useMutation({
+    mutationFn: async (data: UserFormValues) => {
+      if (!orgId) throw new Error('Organization ID is required');
+      if (!userData?.id) throw new Error('User ID is required');
       
       return await userService.createOrgUser({
         ...data,
-        org_id: userData.org_id,
+        org_id: orgId,
+        created_by: userData.id
       });
     },
     onSuccess: () => {
-      toast.success('User created successfully');
-      queryClient.invalidateQueries({ queryKey: ['orgUsers', userData?.org_id] });
-      setIsCreateDialogOpen(false);
-      createForm.reset();
+      toast.success('User added successfully');
+      queryClient.invalidateQueries({ queryKey: ['users', orgId] });
+      setIsAddDialogOpen(false);
+      addUserForm.reset();
     },
     onError: (error: any) => {
-      toast.error(`Failed to create user: ${error.message}`);
+      toast.error(`Failed to add user: ${error.message}`);
     }
   });
 
   // Update user mutation
   const updateUserMutation = useMutation({
-    mutationFn: async ({ userId, data }: { userId: string, data: Partial<z.infer<typeof userFormSchema>> }) => {
+    mutationFn: async ({ userId, data }: { userId: string; data: Partial<UserFormValues> }) => {
       return await userService.updateOrgUser(userId, data);
     },
     onSuccess: () => {
       toast.success('User updated successfully');
-      queryClient.invalidateQueries({ queryKey: ['orgUsers', userData?.org_id] });
+      queryClient.invalidateQueries({ queryKey: ['users', orgId] });
       setIsEditDialogOpen(false);
       setSelectedUser(null);
+      editUserForm.reset();
     },
     onError: (error: any) => {
       toast.error(`Failed to update user: ${error.message}`);
@@ -112,118 +118,103 @@ const Users = () => {
     },
     onSuccess: () => {
       toast.success('User deleted successfully');
-      queryClient.invalidateQueries({ queryKey: ['orgUsers', userData?.org_id] });
+      queryClient.invalidateQueries({ queryKey: ['users', orgId] });
     },
     onError: (error: any) => {
       toast.error(`Failed to delete user: ${error.message}`);
     }
   });
 
-  // Create form setup
-  const createForm = useForm<z.infer<typeof userFormSchema>>({
+  // Form for adding a new user
+  const addUserForm = useForm<UserFormValues>({
     resolver: zodResolver(userFormSchema),
     defaultValues: {
       name: '',
       email: '',
       phone: '',
       address: '',
-      department: '',
       password: '',
-      is_admin: false,
-    },
-  });
-
-  // Edit form setup
-  const editForm = useForm<Partial<z.infer<typeof userFormSchema>>>({
-    resolver: zodResolver(userFormSchema.partial()),
-    defaultValues: {
-      name: '',
-      email: '',
-      phone: '',
-      address: '',
       department: '',
       is_admin: false,
     },
   });
 
-  // Handle create form submission
-  const onCreateSubmit = (data: z.infer<typeof userFormSchema>) => {
-    createUserMutation.mutate(data);
+  // Form for editing a user
+  const editUserForm = useForm<Partial<UserFormValues>>({
+    resolver: zodResolver(
+      userFormSchema
+      .extend({ password: z.string().min(6).optional() })
+      .partial()
+    ),
+    values: selectedUser ? {
+      name: selectedUser.name,
+      email: selectedUser.email,
+      phone: selectedUser.phone,
+      address: selectedUser.address,
+      department: selectedUser.department || '',
+      is_admin: selectedUser.is_admin,
+      password: '',
+    } : {},
+  });
+
+  // Handle adding a new user
+  const onAddUser = (data: UserFormValues) => {
+    addUserMutation.mutate(data);
   };
 
-  // Handle edit form submission
-  const onEditSubmit = (data: Partial<z.infer<typeof userFormSchema>>) => {
+  // Handle editing a user
+  const onEditUser = (data: Partial<UserFormValues>) => {
     if (!selectedUser) return;
     
-    const updateData: Partial<z.infer<typeof userFormSchema>> = {};
-    if (data.name) updateData.name = data.name;
-    if (data.email) updateData.email = data.email;
-    if (data.phone) updateData.phone = data.phone;
-    if (data.address) updateData.address = data.address;
-    if (data.department) updateData.department = data.department;
-    if (data.password) updateData.password = data.password;
-    if (data.is_admin !== undefined) updateData.is_admin = data.is_admin;
+    // Remove empty fields
+    const dataToSubmit = Object.fromEntries(
+      Object.entries(data).filter(([_, value]) => value !== '')
+    );
     
     updateUserMutation.mutate({ 
       userId: selectedUser.id, 
-      data: updateData 
+      data: dataToSubmit 
     });
   };
 
-  // Handle edit user
-  const handleEditUser = (user: OrgUser) => {
-    setSelectedUser(user);
-    editForm.reset({
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      address: user.address,
-      department: user.department,
-      is_admin: user.is_admin,
-    });
-    setIsEditDialogOpen(true);
-  };
-
-  // Handle delete user
+  // Handle deleting a user
   const handleDeleteUser = (userId: string) => {
     if (confirm('Are you sure you want to delete this user?')) {
       deleteUserMutation.mutate(userId);
     }
   };
 
-  // Filter users based on search term
-  const filteredUsers = users ? users.filter((user: OrgUser) => {
-    return searchTerm === '' || 
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.department.toLowerCase().includes(searchTerm.toLowerCase());
-  }) : [];
+  // Select a user for editing
+  const handleEditUser = (user: User) => {
+    setSelectedUser(user);
+    setIsEditDialogOpen(true);
+  };
 
   return (
     <div className="space-y-8 animate-fade-in">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-gray-900">Users</h2>
-          <p className="text-muted-foreground">Manage users in your organization</p>
+          <h2 className="text-3xl font-bold tracking-tight text-gray-900">Organization Users</h2>
+          <p className="text-muted-foreground">Manage users of your organization</p>
         </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <Button className="gap-2">
-              <Plus size={16} />
+              <UserPlus size={16} />
               Add User
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[550px]">
             <DialogHeader>
-              <DialogTitle>Create New User</DialogTitle>
+              <DialogTitle>Add New User</DialogTitle>
               <DialogDescription>
-                Enter the details for the new user. Click save when you're done.
+                Add a new user to your organization. They will receive an email with login instructions.
               </DialogDescription>
             </DialogHeader>
-            <Form {...createForm}>
-              <form onSubmit={createForm.handleSubmit(onCreateSubmit)} className="space-y-4 pt-4">
+            <Form {...addUserForm}>
+              <form onSubmit={addUserForm.handleSubmit(onAddUser)} className="space-y-4 pt-4">
                 <FormField
-                  control={createForm.control}
+                  control={addUserForm.control}
                   name="name"
                   render={({ field }) => (
                     <FormItem>
@@ -236,7 +227,7 @@ const Users = () => {
                   )}
                 />
                 <FormField
-                  control={createForm.control}
+                  control={addUserForm.control}
                   name="email"
                   render={({ field }) => (
                     <FormItem>
@@ -249,7 +240,7 @@ const Users = () => {
                   )}
                 />
                 <FormField
-                  control={createForm.control}
+                  control={addUserForm.control}
                   name="password"
                   render={({ field }) => (
                     <FormItem>
@@ -263,7 +254,7 @@ const Users = () => {
                 />
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
-                    control={createForm.control}
+                    control={addUserForm.control}
                     name="phone"
                     render={({ field }) => (
                       <FormItem>
@@ -276,11 +267,11 @@ const Users = () => {
                     )}
                   />
                   <FormField
-                    control={createForm.control}
+                    control={addUserForm.control}
                     name="department"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Department</FormLabel>
+                        <FormLabel>Department (Optional)</FormLabel>
                         <FormControl>
                           <Input placeholder="Enter department" {...field} />
                         </FormControl>
@@ -290,7 +281,7 @@ const Users = () => {
                   />
                 </div>
                 <FormField
-                  control={createForm.control}
+                  control={addUserForm.control}
                   name="address"
                   render={({ field }) => (
                     <FormItem>
@@ -303,16 +294,14 @@ const Users = () => {
                   )}
                 />
                 <FormField
-                  control={createForm.control}
+                  control={addUserForm.control}
                   name="is_admin"
                   render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                       <div className="space-y-0.5">
-                        <FormLabel className="text-base">
-                          Admin Privileges
-                        </FormLabel>
-                        <FormDescription>
-                          Grant admin access to this user
+                        <FormLabel>Admin Privileges</FormLabel>
+                        <FormDescription className="text-xs">
+                          Admins can manage users and settings
                         </FormDescription>
                       </div>
                       <FormControl>
@@ -325,8 +314,8 @@ const Users = () => {
                   )}
                 />
                 <DialogFooter>
-                  <Button type="submit" disabled={createUserMutation.isPending}>
-                    {createUserMutation.isPending ? 'Creating...' : 'Create User'}
+                  <Button type="submit" disabled={addUserMutation.isPending}>
+                    {addUserMutation.isPending ? 'Adding...' : 'Add User'}
                   </Button>
                 </DialogFooter>
               </form>
@@ -335,60 +324,49 @@ const Users = () => {
         </Dialog>
       </div>
 
-      <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-        <Input
-          placeholder="Search users by name, email, or department"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-10"
-        />
-      </div>
-
       <DataState 
         isLoading={isLoading} 
         error={error} 
-        isEmpty={!filteredUsers || filteredUsers.length === 0}
-        emptyMessage={searchTerm ? "No users match your search" : "No users found. Click 'Add User' to create one."}
+        isEmpty={!users || users.length === 0}
+        emptyMessage="No users found in this organization."
       >
         <Card>
-          <CardHeader className="bg-gray-50 border-b">
-            <CardTitle className="text-lg">Users List</CardTitle>
+          <CardHeader>
+            <CardTitle>Organization Users</CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead>Department</TableHead>
                   <TableHead>Phone</TableHead>
+                  <TableHead>Department</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.map((user: OrgUser) => (
+                {users?.map((user: User) => (
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">{user.name}</TableCell>
                     <TableCell>{user.email}</TableCell>
-                    <TableCell>{user.department}</TableCell>
                     <TableCell>{user.phone}</TableCell>
+                    <TableCell>{user.department || '-'}</TableCell>
                     <TableCell>{user.is_admin ? 'Admin' : 'User'}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8"
                           onClick={() => handleEditUser(user)}
                         >
-                          <Pencil size={16} />
+                          <Edit size={16} />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
+                          className="text-red-500 hover:text-red-600 hover:bg-red-50"
                           onClick={() => handleDeleteUser(user.id)}
                         >
                           <Trash2 size={16} />
@@ -409,13 +387,13 @@ const Users = () => {
           <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
             <DialogDescription>
-              Update the details for this user. Fields left blank will remain unchanged.
+              Update user information. Leave password empty to keep the current one.
             </DialogDescription>
           </DialogHeader>
-          <Form {...editForm}>
-            <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4 pt-4">
+          <Form {...editUserForm}>
+            <form onSubmit={editUserForm.handleSubmit(onEditUser)} className="space-y-4 pt-4">
               <FormField
-                control={editForm.control}
+                control={editUserForm.control}
                 name="name"
                 render={({ field }) => (
                   <FormItem>
@@ -428,7 +406,7 @@ const Users = () => {
                 )}
               />
               <FormField
-                control={editForm.control}
+                control={editUserForm.control}
                 name="email"
                 render={({ field }) => (
                   <FormItem>
@@ -441,13 +419,13 @@ const Users = () => {
                 )}
               />
               <FormField
-                control={editForm.control}
+                control={editUserForm.control}
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Password (leave blank to keep unchanged)</FormLabel>
+                    <FormLabel>Password (Leave empty to keep current)</FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter new password" type="password" {...field} value={field.value || ''} />
+                      <Input placeholder="Enter new password" type="password" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -455,7 +433,7 @@ const Users = () => {
               />
               <div className="grid grid-cols-2 gap-4">
                 <FormField
-                  control={editForm.control}
+                  control={editUserForm.control}
                   name="phone"
                   render={({ field }) => (
                     <FormItem>
@@ -468,11 +446,11 @@ const Users = () => {
                   )}
                 />
                 <FormField
-                  control={editForm.control}
+                  control={editUserForm.control}
                   name="department"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Department</FormLabel>
+                      <FormLabel>Department (Optional)</FormLabel>
                       <FormControl>
                         <Input placeholder="Enter department" {...field} />
                       </FormControl>
@@ -482,7 +460,7 @@ const Users = () => {
                 />
               </div>
               <FormField
-                control={editForm.control}
+                control={editUserForm.control}
                 name="address"
                 render={({ field }) => (
                   <FormItem>
@@ -495,21 +473,19 @@ const Users = () => {
                 )}
               />
               <FormField
-                control={editForm.control}
+                control={editUserForm.control}
                 name="is_admin"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                     <div className="space-y-0.5">
-                      <FormLabel className="text-base">
-                        Admin Privileges
-                      </FormLabel>
-                      <FormDescription>
-                        Grant admin access to this user
-                      </FormDescription>
+                      <FormLabel>Admin Privileges</FormLabel>
+                      <p className="text-sm text-muted-foreground">
+                        Admins can manage users and settings
+                      </p>
                     </div>
                     <FormControl>
                       <Switch
-                        checked={field.value || false}
+                        checked={field.value}
                         onCheckedChange={field.onChange}
                       />
                     </FormControl>
@@ -529,4 +505,4 @@ const Users = () => {
   );
 };
 
-export default Users;
+export default OrgAdminUsers;

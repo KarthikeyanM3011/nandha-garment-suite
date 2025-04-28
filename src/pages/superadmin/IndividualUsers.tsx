@@ -1,21 +1,32 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { userService } from '@/services/api';
+import { userService } from '@/services/api-extensions';
 import { toast } from 'sonner';
 import { DataState } from '@/components/ui/data-state';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Pencil, Trash2, X } from 'lucide-react';
+import { Plus, Edit, Trash2, UserPlus } from 'lucide-react';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 
-// Define types
-interface IndividualUser {
+// Define the user schema
+const userFormSchema = z.object({
+  name: z.string().min(2, { message: "Name must be at least 2 characters" }),
+  email: z.string().email({ message: "Please enter a valid email address" }),
+  phone: z.string().min(10, { message: "Phone number must be at least 10 characters" }),
+  address: z.string().min(5, { message: "Address must be at least 5 characters" }),
+  password: z.string().min(6, { message: "Password must be at least 6 characters" }).optional(),
+});
+
+type UserFormValues = z.infer<typeof userFormSchema>;
+
+interface User {
   id: string;
   name: string;
   email: string;
@@ -25,86 +36,86 @@ interface IndividualUser {
   updated_at: string;
 }
 
-// Define form schema
-const individualFormSchema = z.object({
-  name: z.string().min(2, { message: "Name must be at least 2 characters" }),
-  email: z.string().email({ message: "Please enter a valid email address" }),
-  phone: z.string().min(10, { message: "Phone number must be at least 10 characters" }),
-  address: z.string().min(5, { message: "Address must be at least 5 characters" }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters" }),
-});
-
 const IndividualUsers = () => {
   const queryClient = useQueryClient();
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<IndividualUser | null>(null);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
   // Fetch individual users
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['individualUsers'],
+  const { 
+    data: users, 
+    isLoading, 
+    error 
+  } = useQuery({
+    queryKey: ['individual-users'],
     queryFn: async () => {
       try {
-        console.log('Fetching individual users...');   
-        const response = await userService.getIndividuals();
-        console.log('Individual users fetched:', response.data);
-        return response.data.individuals || [];
+        const response = await userService.getIndividualUsers();
+        return response.data.users || [];
       } catch (err) {
         console.error('Failed to fetch individual users:', err);
         throw new Error('Failed to fetch individual users');
       }
-    }
+    },
   });
 
-  // Create individual user mutation
-  const createUserMutation = useMutation({
-    mutationFn: async (data: z.infer<typeof individualFormSchema>) => {
-      return await userService.createIndividual(data);
+  // Add user mutation
+  const addUserMutation = useMutation({
+    mutationFn: async (data: UserFormValues) => {
+      return await userService.createIndividual({
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        address: data.address,
+        password: data.password || '123456',
+      });
     },
     onSuccess: () => {
-      toast.success('Individual user created successfully');
-      queryClient.invalidateQueries({ queryKey: ['individualUsers'] });
-      setIsCreateDialogOpen(false);
-      createForm.reset();
+      toast.success('User added successfully');
+      queryClient.invalidateQueries({ queryKey: ['individual-users'] });
+      setIsAddDialogOpen(false);
+      addUserForm.reset();
     },
     onError: (error: any) => {
-      toast.error(`Failed to create individual user: ${error.message}`);
+      toast.error(`Failed to add user: ${error.message}`);
     }
   });
 
-  // Update individual user mutation
+  // Update user mutation
   const updateUserMutation = useMutation({
-    mutationFn: async ({ userId, data }: { userId: string, data: Partial<z.infer<typeof individualFormSchema>> }) => {
-      return await userService.updateIndividual(userId, data);
+    mutationFn: async ({ userId, data }: { userId: string; data: Partial<UserFormValues> }) => {
+      return await userService.updateIndividualUser(userId, data);
     },
     onSuccess: () => {
-      toast.success('Individual user updated successfully');
-      queryClient.invalidateQueries({ queryKey: ['individualUsers'] });
+      toast.success('User updated successfully');
+      queryClient.invalidateQueries({ queryKey: ['individual-users'] });
       setIsEditDialogOpen(false);
       setSelectedUser(null);
+      editUserForm.reset();
     },
     onError: (error: any) => {
-      toast.error(`Failed to update individual user: ${error.message}`);
+      toast.error(`Failed to update user: ${error.message}`);
     }
   });
 
-  // Delete individual user mutation
+  // Delete user mutation
   const deleteUserMutation = useMutation({
     mutationFn: async (userId: string) => {
-      return await userService.deleteIndividual(userId);
+      return await userService.deleteIndividualUser(userId);
     },
     onSuccess: () => {
-      toast.success('Individual user deleted successfully');
-      queryClient.invalidateQueries({ queryKey: ['individualUsers'] });
+      toast.success('User deleted successfully');
+      queryClient.invalidateQueries({ queryKey: ['individual-users'] });
     },
     onError: (error: any) => {
-      toast.error(`Failed to delete individual user: ${error.message}`);
+      toast.error(`Failed to delete user: ${error.message}`);
     }
   });
 
-  // Create form setup
-  const createForm = useForm<z.infer<typeof individualFormSchema>>({
-    resolver: zodResolver(individualFormSchema),
+  // Form for adding a new user
+  const addUserForm = useForm<UserFormValues>({
+    resolver: zodResolver(userFormSchema),
     defaultValues: {
       name: '',
       email: '',
@@ -114,56 +125,53 @@ const IndividualUsers = () => {
     },
   });
 
-  // Edit form setup
-  const editForm = useForm<Partial<z.infer<typeof individualFormSchema>>>({
-    resolver: zodResolver(individualFormSchema.partial()),
-    defaultValues: {
-      name: '',
-      email: '',
-      phone: '',
-      address: '',
-    },
+  // Form for editing a user
+  const editUserForm = useForm<Partial<UserFormValues>>({
+    resolver: zodResolver(
+      userFormSchema
+      .extend({ password: z.string().min(6).optional() })
+      .partial()
+    ),
+    values: selectedUser ? {
+      name: selectedUser.name,
+      email: selectedUser.email,
+      phone: selectedUser.phone,
+      address: selectedUser.address,
+      password: '',
+    } : {},
   });
 
-  // Handle create form submission
-  const onCreateSubmit = (data: z.infer<typeof individualFormSchema>) => {
-    createUserMutation.mutate(data);
+  // Handle adding a new user
+  const onAddUser = (data: UserFormValues) => {
+    addUserMutation.mutate(data);
   };
 
-  // Handle edit form submission
-  const onEditSubmit = (data: Partial<z.infer<typeof individualFormSchema>>) => {
+  // Handle editing a user
+  const onEditUser = (data: Partial<UserFormValues>) => {
     if (!selectedUser) return;
     
-    const updateData: Partial<z.infer<typeof individualFormSchema>> = {};
-    if (data.name) updateData.name = data.name;
-    if (data.email) updateData.email = data.email;
-    if (data.phone) updateData.phone = data.phone;
-    if (data.address) updateData.address = data.address;
-    if (data.password) updateData.password = data.password;
+    // Remove empty fields
+    const dataToSubmit = Object.fromEntries(
+      Object.entries(data).filter(([_, value]) => value !== '')
+    );
     
     updateUserMutation.mutate({ 
       userId: selectedUser.id, 
-      data: updateData 
+      data: dataToSubmit 
     });
   };
 
-  // Handle edit user
-  const handleEditUser = (user: IndividualUser) => {
-    setSelectedUser(user);
-    editForm.reset({
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      address: user.address,
-    });
-    setIsEditDialogOpen(true);
-  };
-
-  // Handle delete user
+  // Handle deleting a user
   const handleDeleteUser = (userId: string) => {
     if (confirm('Are you sure you want to delete this user?')) {
       deleteUserMutation.mutate(userId);
     }
+  };
+
+  // Select a user for editing
+  const handleEditUser = (user: User) => {
+    setSelectedUser(user);
+    setIsEditDialogOpen(true);
   };
 
   return (
@@ -171,26 +179,26 @@ const IndividualUsers = () => {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold tracking-tight text-gray-900">Individual Users</h2>
-          <p className="text-muted-foreground">Manage all individual users in the system</p>
+          <p className="text-muted-foreground">Manage individual users of the platform</p>
         </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <Button className="gap-2">
-              <Plus size={16} />
-              Add Individual User
+              <UserPlus size={16} />
+              Add User
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[550px]">
             <DialogHeader>
-              <DialogTitle>Create New Individual User</DialogTitle>
+              <DialogTitle>Add New Individual User</DialogTitle>
               <DialogDescription>
-                Enter the details for the new individual user. Click save when you're done.
+                Add a new individual user to the platform. They will receive an email with login instructions.
               </DialogDescription>
             </DialogHeader>
-            <Form {...createForm}>
-              <form onSubmit={createForm.handleSubmit(onCreateSubmit)} className="space-y-4 pt-4">
+            <Form {...addUserForm}>
+              <form onSubmit={addUserForm.handleSubmit(onAddUser)} className="space-y-4 pt-4">
                 <FormField
-                  control={createForm.control}
+                  control={addUserForm.control}
                   name="name"
                   render={({ field }) => (
                     <FormItem>
@@ -203,7 +211,7 @@ const IndividualUsers = () => {
                   )}
                 />
                 <FormField
-                  control={createForm.control}
+                  control={addUserForm.control}
                   name="email"
                   render={({ field }) => (
                     <FormItem>
@@ -216,7 +224,7 @@ const IndividualUsers = () => {
                   )}
                 />
                 <FormField
-                  control={createForm.control}
+                  control={addUserForm.control}
                   name="password"
                   render={({ field }) => (
                     <FormItem>
@@ -230,7 +238,7 @@ const IndividualUsers = () => {
                 />
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
-                    control={createForm.control}
+                    control={addUserForm.control}
                     name="phone"
                     render={({ field }) => (
                       <FormItem>
@@ -244,7 +252,7 @@ const IndividualUsers = () => {
                   />
                 </div>
                 <FormField
-                  control={createForm.control}
+                  control={addUserForm.control}
                   name="address"
                   render={({ field }) => (
                     <FormItem>
@@ -257,8 +265,8 @@ const IndividualUsers = () => {
                   )}
                 />
                 <DialogFooter>
-                  <Button type="submit" disabled={createUserMutation.isPending}>
-                    {createUserMutation.isPending ? 'Creating...' : 'Create User'}
+                  <Button type="submit" disabled={addUserMutation.isPending}>
+                    {addUserMutation.isPending ? 'Adding...' : 'Add User'}
                   </Button>
                 </DialogFooter>
               </form>
@@ -270,71 +278,73 @@ const IndividualUsers = () => {
       <DataState 
         isLoading={isLoading} 
         error={error} 
-        isEmpty={!data || data.length === 0}
-        emptyMessage="No individual users found. Click 'Add Individual User' to create one."
+        isEmpty={!users || users.length === 0}
+        emptyMessage="No individual users found."
       >
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {data && data.map((user: IndividualUser) => (
-            <Card key={user.id} className="overflow-hidden transition-all hover:shadow-md">
-              <CardHeader className="bg-gray-50 border-b">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <CardTitle className="text-xl font-bold">{user.name}</CardTitle>
-                    <CardDescription className="mt-1">{user.email}</CardDescription>
-                  </div>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                    onClick={() => handleDeleteUser(user.id)}
-                  >
-                    <Trash2 size={18} />
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Phone:</span>
-                    <span className="font-medium">{user.phone}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Address:</span>
-                    <p className="font-medium mt-1">{user.address}</p>
-                  </div>
-                </div>
-              </CardContent>
-              <CardFooter className="border-t bg-gray-50 py-3">
-                <div className="text-xs text-muted-foreground w-full flex justify-between">
-                  <span>Created: {new Date(user.created_at).toLocaleDateString()}</span>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="h-8"
-                    onClick={() => handleEditUser(user)}
-                  >
-                    <Pencil size={14} className="mr-1" /> Edit
-                  </Button>
-                </div>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Individual Users</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>Address</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {users?.map((user: User) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">{user.name}</TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell>{user.phone}</TableCell>
+                    <TableCell>{user.address}</TableCell>
+                    <TableCell>{new Date(user.created_at).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEditUser(user)}
+                        >
+                          <Edit size={16} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                          onClick={() => handleDeleteUser(user.id)}
+                        >
+                          <Trash2 size={16} />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       </DataState>
 
       {/* Edit User Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="sm:max-w-[550px]">
           <DialogHeader>
-            <DialogTitle>Edit Individual User</DialogTitle>
+            <DialogTitle>Edit User</DialogTitle>
             <DialogDescription>
-              Update the details for this individual user. Fields left blank will remain unchanged.
+              Update user information. Leave password empty to keep the current one.
             </DialogDescription>
           </DialogHeader>
-          <Form {...editForm}>
-            <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4 pt-4">
+          <Form {...editUserForm}>
+            <form onSubmit={editUserForm.handleSubmit(onEditUser)} className="space-y-4 pt-4">
               <FormField
-                control={editForm.control}
+                control={editUserForm.control}
                 name="name"
                 render={({ field }) => (
                   <FormItem>
@@ -347,7 +357,7 @@ const IndividualUsers = () => {
                 )}
               />
               <FormField
-                control={editForm.control}
+                control={editUserForm.control}
                 name="email"
                 render={({ field }) => (
                   <FormItem>
@@ -360,13 +370,13 @@ const IndividualUsers = () => {
                 )}
               />
               <FormField
-                control={editForm.control}
+                control={editUserForm.control}
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Password (leave blank to keep unchanged)</FormLabel>
+                    <FormLabel>Password (Leave empty to keep current)</FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter new password" type="password" {...field} value={field.value || ''} />
+                      <Input placeholder="Enter new password" type="password" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -374,7 +384,7 @@ const IndividualUsers = () => {
               />
               <div className="grid grid-cols-2 gap-4">
                 <FormField
-                  control={editForm.control}
+                  control={editUserForm.control}
                   name="phone"
                   render={({ field }) => (
                     <FormItem>
@@ -388,7 +398,7 @@ const IndividualUsers = () => {
                 />
               </div>
               <FormField
-                control={editForm.control}
+                control={editUserForm.control}
                 name="address"
                 render={({ field }) => (
                   <FormItem>
