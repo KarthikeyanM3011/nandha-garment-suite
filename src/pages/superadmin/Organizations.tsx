@@ -52,7 +52,9 @@ const Organizations = () => {
     queryKey: ['organizations'],
     queryFn: async () => {
       try {
+        console.log('Fetching organizations...');   
         const response = await organizationService.getAllOrganizations();
+        console.log('Organizations fetched:', response.data);
         return response.data.organizations || [];
       } catch (err) {
         console.error('Failed to fetch organizations:', err);

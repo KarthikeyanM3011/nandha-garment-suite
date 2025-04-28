@@ -44,6 +44,7 @@ const Orders = () => {
     queryFn: async () => {
       try {
         const response = await orderService.getAllOrders();
+        console.log('Fetched orders:', response.data);
         return response.data.orders || [];
       } catch (err) {
         console.error('Failed to fetch orders:', err);

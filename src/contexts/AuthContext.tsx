@@ -141,7 +141,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     
     try {
-      const userType = userRole.toLowerCase().replace('_', '');
+      const userType = userRole.toLowerCase();
       const response = await authService.resetPassword({
         user_type: userType,
         email,

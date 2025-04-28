@@ -9,6 +9,7 @@ import {
   CardTitle,
   CardFooter,
 } from '@/components/ui/card';
+import { organizationService } from '@/services/api-extensions';
 import { Button } from '@/components/ui/button';
 import { Building2, Users, ShoppingBag, ClipboardList, ArrowRight, AlertCircle, Calendar } from 'lucide-react';
 import { userService, productService } from '../../services/api';
@@ -27,30 +28,13 @@ const SuperAdminDashboard: React.FC = () => {
     queryKey: ['organizations'],
     queryFn: async () => {
       try {
-        // In a real implementation, we would have an API endpoint to get all organizations
-        // For now, we'll simulate getting org admins, which gives us org data
-        const response = await userService.getAllOrgAdmins();
-        
-        // Extract unique organizations
-        const orgs = response.data.admins.reduce((acc: any[], admin: any) => {
-          if (!acc.some(org => org.id === admin.org_id)) {
-            acc.push({
-              id: admin.org_id,
-              name: admin.org_name,
-              adminCount: 1
-            });
-          } else {
-            const org = acc.find(org => org.id === admin.org_id);
-            if (org) org.adminCount++;
-          }
-          return acc;
-        }, []);
-        
-        return orgs;
-      } catch (error) {
-        console.error('Failed to fetch organizations:', error);
-        toast.error('Failed to fetch organizations data');
-        throw error;
+        console.log('Fetching organizations...');   
+        const response = await organizationService.getAllOrganizations();
+        console.log('Organizations fetched:', response.data);
+        return response.data.organizations || [];
+      } catch (err) {
+        console.error('Failed to fetch organizations:', err);
+        throw new Error('Failed to fetch organizations');
       }
     }
   });

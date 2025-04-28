@@ -18,6 +18,10 @@ import UnauthorizedPage from "./pages/unauthorized/UnauthorizedPage";
 
 // Super Admin Pages
 import SuperAdminDashboard from "./pages/superadmin/Dashboard";
+import Organizations from "./pages/superadmin/Organizations";
+import Orders from "./pages/superadmin/Orders";
+import Products from "./pages/superadmin/Products";
+
 
 // Organization Admin Pages
 import OrgAdminDashboard from "./pages/orgadmin/Dashboard";
@@ -69,13 +73,13 @@ const App = () => {
               </ProtectedRoute>
             }>
               <Route path="dashboard" element={<SuperAdminDashboard />} />
-              <Route path="organizations" element={<div>Organizations Management</div>} />
+              <Route path="organizations" element={<Organizations />} />
               <Route path="organizations/:orgId" element={<div>Organization Details</div>} />
               <Route path="organizations/new" element={<div>Create Organization</div>} />
-              <Route path="products" element={<div>Products Management</div>} />
+              <Route path="products" element={<Products />} />
               <Route path="products/:productId" element={<div>Product Details</div>} />
               <Route path="products/new" element={<div>Create Product</div>} />
-              <Route path="orders" element={<div>Orders Management</div>} />
+              <Route path="orders" element={<Orders />} />
               <Route path="orders/:orderId" element={<div>Order Details</div>} />
               <Route path="profile" element={<div>Profile Settings</div>} />
               <Route index element={<Navigate to="dashboard" replace />} />
