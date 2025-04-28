@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { measurementService } from '@/services/api-extensions';
@@ -52,7 +51,7 @@ const OrgAdminMeasurements = () => {
       if (!orgId) throw new Error('Organization ID is required');
       
       try {
-        const response = await measurementService.getOrgMeasurements(orgId);
+        const response = await userService.getOrgUsers(orgId);
         return response.data.users || [];
       } catch (err) {
         console.error('Failed to fetch org users:', err);
