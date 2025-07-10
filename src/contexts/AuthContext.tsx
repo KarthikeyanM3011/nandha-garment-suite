@@ -12,6 +12,7 @@ interface UserData {
   email: string;
   org_id?: string;
   org_name?: string;
+  org_logo?: string;
   is_first_login?: boolean;
 }
 

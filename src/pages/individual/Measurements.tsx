@@ -8,9 +8,10 @@ import { DataState } from '@/components/ui/data-state';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, Edit, Trash2, Ruler } from 'lucide-react';
 import { format } from 'date-fns';
-import MeasurementDialog from '@/components/measurements/MeasurementDialog';
+import IndividualMeasurementForm from '@/components/measurements/IndividualMeasurementForm';
 
 interface Measurement {
   id: string;
@@ -167,15 +168,22 @@ const IndividualMeasurements = () => {
         </Card>
       </DataState>
 
-      {isDialogOpen && userId && (
-        <MeasurementDialog
-          isOpen={isDialogOpen}
-          onClose={handleDialogClose}
-          userId={userId}
-          userType={userType}
-          measurementId={selectedMeasurement?.id}
-        />
-      )}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedMeasurement ? 'Edit Measurement' : 'Add New Measurement'}
+            </DialogTitle>
+          </DialogHeader>
+          {userId && (
+            <IndividualMeasurementForm
+              userId={userId}
+              measurementId={selectedMeasurement?.id}
+              onSuccess={handleDialogClose}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -63,10 +63,20 @@ const Header: React.FC = () => {
         <div className="flex items-center justify-between">
           {/* Logo and Brand */}
           <Link to="/" className="flex items-center space-x-2">
-            <div className="bg-gradient-to-r from-brand-blue to-brand-dark rounded-full w-9 h-9 flex items-center justify-center text-white font-bold">
-              NG
-            </div>
-            <span className="text-xl font-bold bg-gradient-to-r from-brand-blue to-brand-dark bg-clip-text text-transparent">Nandha<span className="font-semibold">Garments</span></span>
+            {userRole === 'ORG_ADMIN' && userData?.org_logo ? (
+              <img 
+                src={userData.org_logo} 
+                alt={userData.org_name || 'Company logo'} 
+                className="w-9 h-9 rounded-full object-cover"
+              />
+            ) : (
+              <div className="bg-gradient-to-r from-brand-blue to-brand-dark rounded-full w-9 h-9 flex items-center justify-center text-white font-bold">
+                NG
+              </div>
+            )}
+            <span className="text-xl font-bold bg-gradient-to-r from-brand-blue to-brand-dark bg-clip-text text-transparent">
+              {userRole === 'ORG_ADMIN' && userData?.org_name ? userData.org_name : 'Nandha'}<span className="font-semibold">Garments</span>
+            </span>
           </Link>
 
           {/* Desktop Navigation */}
@@ -93,9 +103,11 @@ const Header: React.FC = () => {
           <div className="flex items-center space-x-4">
             {isAuthenticated ? (
               <div className="flex items-center space-x-4">
-                <span className="text-sm hidden md:block text-gray-600">
-                  Welcome, <span className="font-medium text-brand-black">{userData?.name}</span>
-                </span>
+                {userRole === 'INDIVIDUAL' && (
+                  <span className="text-sm hidden md:block text-gray-600">
+                    Welcome, <span className="font-medium text-brand-black">{userData?.name}</span>
+                  </span>
+                )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="rounded-full border border-gray-200 hover:bg-gray-100 hover:text-brand-blue">
